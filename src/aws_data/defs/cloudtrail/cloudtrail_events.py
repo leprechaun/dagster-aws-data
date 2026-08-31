@@ -117,7 +117,7 @@ def _row_from_record(
 def cloudtrail_events(context: dg.AssetExecutionContext, minio_s3: S3Resource) -> pl.DataFrame:
     """One day of raw CloudTrail management-event records, parsed from the
     raw layer's MinIO mirror into the bronze Delta table on MinIO."""
-    partition_date = datetime.strptime(context.partition_key, "%Y-%m-%d").date()
+    partition_date = date.fromisoformat(context.partition_key)
     client = minio_s3.get_client()
 
     organizations = list_organizations(client, RAW_BUCKET, RAW_ROOT_PREFIX)

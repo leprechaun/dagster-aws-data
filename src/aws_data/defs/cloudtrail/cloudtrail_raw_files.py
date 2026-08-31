@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date
 
 import dagster as dg
 from botocore.exceptions import ClientError
@@ -43,7 +43,7 @@ def cloudtrail_files(context: dg.AssetExecutionContext, aws_s3: S3Resource, mini
     byte-for-byte, preserving the AWSLogs/... key layout. Files already
     present on MinIO are skipped, so reruns only copy what's missing - this
     is what lets bronze be reprocessed without re-downloading from AWS."""
-    partition_date = datetime.strptime(context.partition_key, "%Y-%m-%d").date()
+    partition_date = date.fromisoformat(context.partition_key)
     source_client = aws_s3.get_client()
     dest_client = minio_s3.get_client()
 

@@ -23,6 +23,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 force-include = { "pyproject.toml" = "pyproject.toml" }
 
+[tool.ruff]
+src = ["src"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aws_data"]
+
 [tool.dg]
 directory_type = "project"
 
