@@ -1,0 +1,6 @@
+.tmp_dagster_*
+.venv
+.git
+.env
+.env.*
+.github

@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+jobs:
+  analyze:
+    name: Analyze
+
+    runs-on: 'ubuntu-latest'
+    permissions:
+      # required for all workflows
+      security-events: write
+
+      # required to fetch internal or private CodeQL packs
+      packages: read
+
+      # only required for workflows in private repositories
+      actions: read
+      contents: read
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: python, actions
+        build-mode: none
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
+
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Run ruff
+        run: uv run ruff check
+
+      - name: Run dg deps check
+        run: uv run dg check defs
+
+      - name: Run tests
+        run: uv run pytest --cov-report markdown-append:$GITHUB_STEP_SUMMARY -v tests/
+
+      - name: Export coverage
+        run: uv run coverage lcov
+
+      - uses: qltysh/qlty-action/coverage@v2
+        with:
+          token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
+          files: coverage.lcov
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/master'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ github.run_number }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          # only push the built image to GHCR on master — other branches
+          # (including renovate/*) just verify the image still builds
+          push: ${{ github.ref == 'refs/heads/master' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: install wireguard
+        run: |
+          sudo apt install wireguard
+
+      - name: setup wireguard
+        run: |
+          echo "${{ secrets.WIREGUARD_PRIVATE_KEY }}" > /tmp/privatekey-file
+          sudo ip link add dev wg0 type wireguard
+          sudo ip address add dev wg0 ${{ secrets.WIREGUARD_LOCAL_PEER_ADDRESS }} peer ${{ secrets.WIREGUARD_REMOTE_PEER_ADDRESS }}
+          sudo wg set wg0 listen-port 48123 private-key /tmp/privatekey-file peer ${{ secrets.WIREGUARD_PUBLIC_KEY }} allowed-ips ${{ secrets.WIREGUARD_ALLOWED_ADDRESSES }} endpoint ${{ secrets.WIREGUARD_ENDPOINT }}
+
+          sudo ip link set up dev wg0
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > $HOME/.kube/config
+
+      - name: Install helm
+        run: |
+          wget -q https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz
+          tar zxvf helm-*.tar.gz
+          mv linux-amd64/helm /usr/local/bin/
+          chmod 755 /usr/local/bin/helm
+
+      - name: Helm upgrade
+        run: |
+          sed -i s/VERSION/${{ github.run_number }}/g helm-charts/values/prod.yaml
+
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm upgrade --install -n dagster \
+            aws-data dagster/dagster-user-deployments \
+            -f helm-charts/values/prod.yaml
