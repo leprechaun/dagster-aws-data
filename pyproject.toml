@@ -7,12 +7,14 @@ dependencies = [
     "dagster-aws",
     "dagster-deltalake-polars>=0.29.20",
     "dagster-k8s>=0.29.20",
+    "pytest-cov>=7.1.0",
 ]
 
 [dependency-groups]
 dev = [
     "dagster-dg-cli",
     "dagster-webserver",
+    "pytest>=9.1.1",
     "ruff>=0.16.5",
 ]
 
