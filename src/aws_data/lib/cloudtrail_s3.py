@@ -16,9 +16,9 @@ SOURCE_BUCKET = "lmacguire-aws-logs"
 SOURCE_REGION = "us-east-1"
 SOURCE_PREFIX = "AWSLogs"
 
-# Everything this project owns on shared storage lives under this name: the
-# leading asset-key component, the Raw prefix below, and (via
-# MINIO_LAKEHOUSE_ROOT_URI) the Delta tables. The asset key alone doesn't
+# Everything this project owns on shared infrastructure lives under this name:
+# the leading asset-key component, the Dagster concurrency pool, the Raw prefix
+# below, and (via MINIO_LAKEHOUSE_ROOT_URI) the Delta tables. The asset key alone doesn't
 # place Delta tables (only its last two parts do), so the root URI and
 # RAW_PREFIX must carry the namespace on their own.
 PROJECT_PREFIX = "aws-data"

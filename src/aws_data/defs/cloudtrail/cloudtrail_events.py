@@ -111,9 +111,10 @@ def _row_from_record(
     kinds={"s3", "deltalake"},
     metadata={"partition_expr": "event_date"},
     deps=[cloudtrail_files],
-    # Serializes runs of this asset so concurrent backfills can't race each
-    # other committing to the same Delta table on MinIO.
-    pool="cloudtrail_delta_write",
+    # Shared project pool (see PROJECT_PREFIX), which must be limited to 1:
+    # MinIO needs allow_unsafe_rename, so concurrent commits to the same Delta
+    # table can race. The limit lives in instance config, not in this repo.
+    pool=PROJECT_PREFIX,
 )
 def cloudtrail_events(context: dg.AssetExecutionContext, minio_s3: S3Resource) -> pl.DataFrame:
     """One day of raw CloudTrail management-event records, parsed from the

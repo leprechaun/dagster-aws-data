@@ -35,9 +35,9 @@ def _object_exists(client, bucket: str, key: str) -> bool:
     group_name="cloudtrail",
     kinds={"s3"},
     io_manager_key="raw_files_io_manager",
-    # Serializes runs so concurrent backfills don't hammer AWS/MinIO with
-    # redundant listing calls for overlapping days.
-    pool="cloudtrail_raw_copy",
+    # Shared project pool (see PROJECT_PREFIX): keeps concurrent backfills
+    # from hammering AWS/MinIO with redundant listing calls for overlapping days.
+    pool=PROJECT_PREFIX,
 )
 def cloudtrail_files(context: dg.AssetExecutionContext, aws_s3: S3Resource, minio_s3: S3Resource) -> None:
     """Mirrors one day of raw CloudTrail .json.gz files from AWS S3 to MinIO,

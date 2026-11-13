@@ -98,3 +98,11 @@ def test_partitions_start_on_the_first_delivery_day():
     from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
 
     assert CLOUDTRAIL_PARTITIONS_DEF.get_first_partition_key() == "2026-08-23"
+
+
+def test_assets_share_one_project_pool():
+    from aws_data.defs.cloudtrail.cloudtrail_events import cloudtrail_events
+    from aws_data.defs.cloudtrail.cloudtrail_raw_files import cloudtrail_files
+
+    for asset in (cloudtrail_files, cloudtrail_events):
+        assert asset.op.pool == "aws-data"
