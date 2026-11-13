@@ -27,7 +27,7 @@ The layer holding every Record the trail delivers, parsed into typed rows of a D
 ## AWS hierarchy
 
 **Organization**:
-The AWS Organization that owns the trail. Its id is the first level of the Log File key layout.
+The AWS Organization that owns the trail. Its id (always starting `o-`) is the first level of the Log File key layout. The source bucket also holds unrelated folders under `AWSLogs/`, so only folders whose name starts with `o-` count as Organizations.
 
 **Account**:
 An AWS account in the Organization. For a Record, the Account is the one the activity happened in (`recipientAccountId`).

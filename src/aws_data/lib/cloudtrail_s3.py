@@ -44,8 +44,16 @@ def list_common_prefixes(client, bucket: str, prefix: str) -> list[str]:
     return prefixes
 
 
+def is_organization_id(name: str) -> bool:
+    """AWS Organization ids start with "o-". The bucket also holds unrelated
+    folders under AWSLogs/ (e.g. a non-organization trail's account-id
+    folders), which must not be treated as organizations."""
+    return name.startswith("o-")
+
+
 def list_organizations(client, bucket: str, root_prefix: str) -> list[str]:
-    return [p.split("/")[-2] for p in list_common_prefixes(client, bucket, f"{root_prefix}/")]
+    names = [p.split("/")[-2] for p in list_common_prefixes(client, bucket, f"{root_prefix}/")]
+    return [name for name in names if is_organization_id(name)]
 
 
 def list_accounts(client, bucket: str, root_prefix: str, organization_id: str) -> list[str]:

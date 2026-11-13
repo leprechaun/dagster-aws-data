@@ -4,6 +4,7 @@ import pytest
 
 from aws_data.lib.cloudtrail_s3 import (
     day_prefix,
+    is_organization_id,
     list_accounts,
     list_common_prefixes,
     list_day_object_keys,
@@ -28,6 +29,9 @@ KEYS = [
     _key("111111111111", "us-east-1", "2026/11/11", "d.json.gz"),
     _key("222222222222", "us-east-1", "2026/11/10", "e.json.gz"),
     f"{ROOT}/o-other/333333333333/CloudTrail/us-east-1/2026/11/10/f.json.gz",
+    # Not organizations: a non-organization trail's account folder, and a stray folder.
+    f"{ROOT}/999999999999/CloudTrail/us-east-1/2026/11/10/g.json.gz",
+    f"{ROOT}/garbage/readme.txt",
 ]
 
 
@@ -51,12 +55,21 @@ class TestListing:
     def test_list_common_prefixes_spans_pages(self):
         small_pages = FakeS3Client(KEYS, page_size=1)
         assert list_common_prefixes(small_pages, "b", f"{ROOT}/") == [
+            f"{ROOT}/999999999999/",
+            f"{ROOT}/garbage/",
             f"{ROOT}/{ORG}/",
             f"{ROOT}/o-other/",
         ]
 
-    def test_list_organizations(self, client):
+    def test_list_organizations_skips_folders_that_are_not_organizations(self, client):
         assert list_organizations(client, "b", ROOT) == [ORG, "o-other"]
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [("o-k4x9q2mzr7", True), ("o-", True), ("123456789012", False), ("garbage", False), ("O-ABC", False)],
+    )
+    def test_is_organization_id(self, name, expected):
+        assert is_organization_id(name) is expected
 
     def test_list_accounts(self, client):
         assert list_accounts(client, "b", ROOT, ORG) == ["111111111111", "222222222222"]
