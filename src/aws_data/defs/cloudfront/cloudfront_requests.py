@@ -1,5 +1,5 @@
 import gzip
-import json
+import io
 import re
 from datetime import date, datetime, timezone
 
@@ -77,57 +77,51 @@ def _column_name(field: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", field.lower()).strip("_")
 
 
-def _clean(value):
-    """CloudFront writes "-" for a missing value."""
-    return None if value in (None, "", "-") else value
-
-
-def _to_int(value) -> int | None:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _to_float(value) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def parse_log_file(body: bytes) -> list[dict]:
-    """The JSON objects, one per line, of a gzipped Log File."""
+def parse_log_file(body: bytes) -> pl.DataFrame:
+    """A gzipped Log File as a table: one row per line, a column per delivered
+    field (named as delivered), plus the original line as `raw_json`."""
     text = gzip.decompress(body).decode("utf-8")
-    return [json.loads(line) for line in text.splitlines()]
+    lines = [line for line in text.splitlines() if line.strip()]
+    fields = pl.read_ndjson(io.BytesIO("\n".join(lines).encode()), infer_schema_length=None)
+    return fields.with_columns(pl.Series("raw_json", lines))
 
 
-def _parse_request_time(day: str | None, time: str | None) -> datetime | None:
-    if not day or not time:
-        return None
-    try:
-        return datetime.strptime(f"{day} {time}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-    except ValueError:
-        return None
+def clean_requests(
+    raw: pl.DataFrame,
+    request_date: date,
+    account_id: str,
+    distribution_id: str,
+    source_key: str,
+    ingested_at: datetime,
+) -> pl.DataFrame:
+    """The table from `parse_log_file`, as typed Bronze rows in CLOUDFRONT_SCHEMA.
+    A field a delivery lacks is a null column; "-" is null; numbers that don't
+    parse are null; fields with no column survive only in `raw_json`."""
+    source_of = {_column_name(name): name for name in raw.columns if name != "raw_json"}
 
+    def field(column: str) -> pl.Expr:
+        if column not in source_of:
+            return pl.lit(None, dtype=pl.Utf8)
+        value = pl.col(source_of[column]).cast(pl.Utf8)
+        return pl.when(value.is_in(["", "-"])).then(None).otherwise(value)
 
-def _row_from_record(
-    record: dict, request_date: date, account_id: str, distribution_id: str, source_key: str, ingested_at: datetime
-) -> dict:
-    fields = {_column_name(name): _clean(value) for name, value in record.items()}
-    request_time = _parse_request_time(fields.get("date"), fields.get("time"))
-    return {
-        "request_date": request_date,
-        "request_time": request_time,
-        "account_id": account_id,
-        "distribution_id": distribution_id,
-        **{column: fields.get(column) for column in STRING_COLUMNS},
-        **{column: _to_int(fields.get(column)) for column in INT_COLUMNS},
-        **{column: _to_float(fields.get(column)) for column in FLOAT_COLUMNS},
-        "source_key": source_key,
-        "ingested_at": ingested_at,
-        "raw_json": json.dumps(record),
-    }
+    request_time = (
+        (field("date") + pl.lit(" ") + field("time"))
+        .str.strptime(pl.Datetime("us"), "%Y-%m-%d %H:%M:%S", strict=False)
+        .dt.replace_time_zone("UTC")
+    )
+    return raw.select(
+        pl.lit(request_date).alias("request_date"),
+        request_time.alias("request_time"),
+        pl.lit(account_id).alias("account_id"),
+        pl.lit(distribution_id).alias("distribution_id"),
+        *[field(column).alias(column) for column in STRING_COLUMNS],
+        *[field(column).cast(pl.Int64, strict=False).alias(column) for column in INT_COLUMNS],
+        *[field(column).cast(pl.Float64, strict=False).alias(column) for column in FLOAT_COLUMNS],
+        pl.lit(source_key).alias("source_key"),
+        pl.lit(ingested_at).alias("ingested_at"),
+        pl.col("raw_json"),
+    ).cast(CLOUDFRONT_SCHEMA)
 
 
 @dg.asset(
@@ -148,17 +142,22 @@ def cloudfront_requests(context: dg.AssetExecutionContext, minio_s3: S3Resource)
     partition_date = date.fromisoformat(context.partition_key)
     client = minio_s3.get_client()
 
-    rows = []
+    frames = []
     for account_id in list_accounts(client, STORAGE_BUCKET, RAW_ROOT_PREFIX):
         for distribution_id in list_distributions(client, STORAGE_BUCKET, RAW_ROOT_PREFIX, account_id):
             for key in list_day_object_keys(
                 client, STORAGE_BUCKET, RAW_ROOT_PREFIX, account_id, distribution_id, partition_date
             ):
                 body = client.get_object(Bucket=STORAGE_BUCKET, Key=key)["Body"].read()
-                ingested_at = datetime.now(timezone.utc)
-                rows.extend(
-                    _row_from_record(record, partition_date, account_id, distribution_id, key, ingested_at)
-                    for record in parse_log_file(body)
+                frames.append(
+                    clean_requests(
+                        parse_log_file(body),
+                        partition_date,
+                        account_id,
+                        distribution_id,
+                        key,
+                        datetime.now(timezone.utc),
+                    )
                 )
 
-    return pl.DataFrame(rows, schema=CLOUDFRONT_SCHEMA)
+    return pl.concat(frames) if frames else pl.DataFrame(schema=CLOUDFRONT_SCHEMA)

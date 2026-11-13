@@ -9,7 +9,7 @@ from dagster._core.test_utils import freeze_time
 from aws_data.defs.cloudfront.cloudfront_requests import (
     CLOUDFRONT_SCHEMA,
     _column_name,
-    _row_from_record,
+    clean_requests,
     cloudfront_requests,
     parse_log_file,
 )
@@ -211,38 +211,6 @@ def test_the_asset_is_registered_after_raw_under_the_project_namespace_in_the_sh
     assert cloudfront_requests.op.pool == "aws-data"
 
 
-def test_parse_log_file_returns_one_object_per_line():
-    other = {**REQUEST, "time": "09:14:00", "sc-status": "404"}
-    body = gzip.compress((json.dumps(REQUEST) + "\n" + json.dumps(other) + "\n").encode())
-
-    assert parse_log_file(body) == [REQUEST, other]
-
-
-def test_row_from_record_maps_one_line_to_one_row():
-    ingested_at = datetime(2026, 11, 14, 0, 5, tzinfo=timezone.utc)
-
-    row = _row_from_record(REQUEST, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "raw/some/key.gz", ingested_at)
-
-    populated = {column: value for column, value in row.items() if value is not None}
-    assert populated == {
-        "request_date": date(2026, 11, 13),
-        "request_time": datetime(2026, 11, 13, 9, 13, 40, tzinfo=timezone.utc),
-        "account_id": ACCOUNT,
-        "distribution_id": DISTRIBUTION,
-        "x_edge_location": "HEL51-P5",
-        "c_ip": "203.0.113.4",
-        "cs_method": "GET",
-        "x_host_header": "www.example.com",
-        "cs_uri_stem": "/",
-        "sc_status": 200,
-        "sc_bytes": 944,
-        "time_taken": 0.537,
-        "source_key": "raw/some/key.gz",
-        "ingested_at": ingested_at,
-        "raw_json": json.dumps(REQUEST),
-    }
-
-
 def test_a_full_delivery_line_maps_its_parenthesised_and_extra_fields():
     key, body = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "23", FULL_REQUEST)
 
@@ -296,10 +264,55 @@ def test_a_field_with_no_column_is_kept_only_in_the_original_line():
     assert json.loads(table["raw_json"][0]) == with_new_field
 
 
-def test_a_number_that_does_not_parse_becomes_null_and_the_rest_of_the_row_survives():
-    garbled = {**REQUEST, "sc-status": "abc", "time-taken": "fast"}
+INGESTED_AT = datetime(2026, 11, 14, 0, 5, tzinfo=timezone.utc)
 
-    row = _row_from_record(garbled, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "k", datetime.now(timezone.utc))
+
+def gz_lines(*records: dict) -> bytes:
+    return gzip.compress("".join(json.dumps(record) + "\n" for record in records).encode())
+
+
+def cleaned(*records: dict) -> pl.DataFrame:
+    """Records -> a Log File's bytes -> the typed Bronze rows, through the two pure functions."""
+    return clean_requests(
+        parse_log_file(gz_lines(*records)), date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "raw/some/key.gz", INGESTED_AT
+    )
+
+
+def test_parse_log_file_gives_a_row_per_line_with_the_delivered_field_names_and_the_original_line():
+    other = {**REQUEST, "time": "09:14:00", "sc-status": "404"}
+
+    table = parse_log_file(gz_lines(REQUEST, other))
+
+    assert table.height == 2
+    assert table["sc-status"].to_list() == ["200", "404"]
+    assert [json.loads(line) for line in table["raw_json"]] == [REQUEST, other]
+
+
+def test_clean_requests_maps_one_line_to_one_row():
+    row = cleaned(REQUEST).row(0, named=True)
+
+    populated = {column: value for column, value in row.items() if value is not None}
+    assert populated == {
+        "request_date": date(2026, 11, 13),
+        "request_time": datetime(2026, 11, 13, 9, 13, 40, tzinfo=timezone.utc),
+        "account_id": ACCOUNT,
+        "distribution_id": DISTRIBUTION,
+        "x_edge_location": "HEL51-P5",
+        "c_ip": "203.0.113.4",
+        "cs_method": "GET",
+        "x_host_header": "www.example.com",
+        "cs_uri_stem": "/",
+        "sc_status": 200,
+        "sc_bytes": 944,
+        "time_taken": 0.537,
+        "source_key": "raw/some/key.gz",
+        "ingested_at": INGESTED_AT,
+        "raw_json": json.dumps(REQUEST),
+    }
+
+
+def test_a_number_that_does_not_parse_becomes_null_and_the_rest_of_the_row_survives():
+    row = cleaned({**REQUEST, "sc-status": "abc", "time-taken": "fast"}).row(0, named=True)
 
     assert row["sc_status"] is None
     assert row["time_taken"] is None
@@ -308,19 +321,14 @@ def test_a_number_that_does_not_parse_becomes_null_and_the_rest_of_the_row_survi
 
 
 def test_a_000_status_from_an_aborted_request_is_kept_as_zero_not_missing():
-    aborted = {**REQUEST, "sc-status": "000"}
-
-    row = _row_from_record(aborted, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "k", datetime.now(timezone.utc))
-
-    assert row["sc_status"] == 0
+    assert cleaned({**REQUEST, "sc-status": "000"})["sc_status"].to_list() == [0]
 
 
 def test_a_missing_or_malformed_date_or_time_gives_a_null_request_time():
     def request_time(record: dict):
-        row = _row_from_record(record, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "k", datetime.now(timezone.utc))
-        return row["request_time"]
+        return cleaned(record)["request_time"].to_list()[0]
 
-    assert request_time({}) is None
+    assert request_time({"x-edge-location": "HEL51-P5"}) is None
     assert request_time({"date": "2026-11-13"}) is None
     assert request_time({"time": "09:13:40"}) is None
     assert request_time({"date": "2026-11-13", "time": "25:00:00"}) is None
@@ -328,10 +336,9 @@ def test_a_missing_or_malformed_date_or_time_gives_a_null_request_time():
     assert request_time({"date": "-", "time": "-"}) is None
 
 
-def test_every_row_from_either_shape_has_exactly_the_tables_columns():
-    for record in (NARROW_REQUEST, FULL_REQUEST, {}):
-        row = _row_from_record(record, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "k", datetime.now(timezone.utc))
-        assert list(row) == list(CLOUDFRONT_SCHEMA)
+def test_every_row_from_either_shape_has_exactly_the_tables_columns_and_types():
+    for record in (NARROW_REQUEST, FULL_REQUEST, {"a-field-with-no-column": "x"}):
+        assert cleaned(record).schema == pl.Schema(CLOUDFRONT_SCHEMA)
 
 
 def test_every_field_either_delivery_sends_has_a_column():
