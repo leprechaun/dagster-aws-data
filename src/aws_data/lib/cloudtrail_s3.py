@@ -13,6 +13,7 @@ import dagster as dg
 
 # Source: the CloudTrail organization trail's S3 destination bucket.
 SOURCE_BUCKET = "lmacguire-aws-logs"
+SOURCE_REGION = "ap-southeast-1"
 SOURCE_PREFIX = "AWSLogs"
 
 # Destination: raw files are mirrored 1:1 (same key layout) under this

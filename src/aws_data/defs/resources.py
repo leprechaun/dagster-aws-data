@@ -6,9 +6,27 @@ from dagster_deltalake import S3Config
 from dagster_deltalake.config import ClientConfig
 from dagster_deltalake_polars import DeltaLakePolarsIOManager
 
+from aws_data.lib.cloudtrail_s3 import SOURCE_REGION
+
 
 def _minio_use_ssl() -> bool:
     return os.getenv("MINIO_USE_SSL", "false").strip().lower() in ("1", "true", "yes")
+
+
+def aws_source_s3(
+    access_key_id: str | dg.EnvVar, secret_access_key: str | dg.EnvVar, region: str = SOURCE_REGION
+) -> S3Resource:
+    """S3 client for the real AWS source bucket. Everything is passed
+    explicitly, including the endpoint, so the ambient AWS_* variables (which
+    other pipelines in this environment point at MinIO, e.g. AWS_ENDPOINT_URL_S3)
+    can never redirect or re-credential it. An explicit endpoint also turns off
+    botocore's cross-region redirect, so it must be the bucket's own region."""
+    return S3Resource(
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+        region_name=region,
+        endpoint_url=f"https://s3.{region}.amazonaws.com",
+    )
 
 
 class RawFilesIOManager(dg.ConfigurableIOManager):
@@ -28,11 +46,13 @@ class RawFilesIOManager(dg.ConfigurableIOManager):
 
 @dg.definitions
 def resources() -> dg.Definitions:
-    # Source data: real AWS S3. Credentials/region come from the standard
-    # boto3 chain (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION env
-    # vars, ~/.aws/credentials, etc.) since there's no IAM-role auto-injection
-    # on bare-metal k3s.
-    aws_s3 = S3Resource()
+    # Source data: real AWS S3, with its own SOURCE_AWS_* credentials. The
+    # plain AWS_* variables are not used: they belong to other pipelines
+    # sharing this environment and point at MinIO.
+    aws_s3 = aws_source_s3(
+        dg.EnvVar("SOURCE_AWS_ACCESS_KEY_ID"),
+        dg.EnvVar("SOURCE_AWS_SECRET_ACCESS_KEY"),
+    )
 
     # Storage: MinIO running on the k3s cluster, spoken to via the S3-compatible API.
     minio_s3 = S3Resource(
