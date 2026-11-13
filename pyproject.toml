@@ -3,7 +3,7 @@ name = "aws_data"
 requires-python = ">=3.10,<3.15"
 version = "0.1.0"
 dependencies = [
-    "dagster==1.13.20",
+    "dagster==1.13.30",
     "dagster-aws",
     "dagster-deltalake-polars>=0.29.20",
     "dagster-k8s>=0.29.20",
