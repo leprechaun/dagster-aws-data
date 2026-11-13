@@ -1,9 +1,12 @@
 import gzip
 import json
+import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
 import dagster as dg
 import polars as pl
+import pytest
 from dagster._core.test_utils import freeze_time
 
 from aws_data.defs.cloudfront.cloudfront_requests import (
@@ -106,18 +109,38 @@ def raw_log_file(account: str, distribution: str, day: str, hour: str, *requests
     return RAW_PREFIX + log_file(account, distribution, day, hour), gzip.compress(body.encode())
 
 
-def bronze_table(raw_objects: dict[str, bytes], partition_key: str = "2026-11-13") -> pl.DataFrame:
+@dataclass
+class BronzeRun:
+    table: pl.DataFrame
+    report: dict  # what the run reported about itself, as plain values
+    warnings: list[str]
+
+
+def run_bronze(raw_objects: dict[str, bytes], partition_key: str = "2026-11-13") -> BronzeRun:
     """Run the Bronze asset against a fake Raw mirror. There is deliberately no AWS
     source resource: Bronze must read only Raw."""
     io_manager = CapturingIOManager()
+    instance = dg.DagsterInstance.ephemeral()
     with freeze_time(AFTER_THE_DAYS_UNDER_TEST):
         result = dg.materialize(
             [cloudfront_requests],
             partition_key=partition_key,
+            instance=instance,
             resources={"minio_s3": FakeS3Resource(FakeS3Client(objects=raw_objects)), "io_manager": io_manager},
         )
     assert result.success
-    return io_manager.outputs["aws-data/bronze/cloudfront_requests"]
+    [materialization] = result.asset_materializations_for_node("aws_data__bronze__cloudfront_requests")
+    return BronzeRun(
+        table=io_manager.outputs["aws-data/bronze/cloudfront_requests"],
+        report={name: value.value for name, value in materialization.metadata.items()},
+        warnings=[
+            entry.user_message for entry in instance.all_logs(result.run_id) if entry.level == logging.WARNING
+        ],
+    )
+
+
+def bronze_table(raw_objects: dict[str, bytes], partition_key: str = "2026-11-13") -> pl.DataFrame:
+    return run_bronze(raw_objects, partition_key).table
 
 
 def test_a_request_becomes_a_row_with_its_request_day_account_and_distribution():
@@ -346,3 +369,92 @@ def test_every_field_either_delivery_sends_has_a_column():
 
     # date and time are combined into request_time
     assert sent - {"date", "time"} <= set(CLOUDFRONT_SCHEMA)
+
+
+def test_parse_log_file_gives_an_empty_table_for_an_empty_file():
+    table = parse_log_file(gzip.compress(b""))
+
+    assert table.height == 0
+    assert "raw_json" in table.columns
+
+
+def test_the_run_reports_what_it_read():
+    first_key, first_body = raw_log_file("111111111111", "E1EXAMPLE0001", "2026-11-13", "09", REQUEST, REQUEST)
+    second_key, second_body = raw_log_file("222222222222", "E1EXAMPLE0002", "2026-11-13", "10", FULL_REQUEST)
+
+    report = run_bronze({first_key: first_body, second_key: second_body}).report
+
+    assert report["files_read"] == 2
+    assert report["files_skipped"] == 0
+    assert report["requests_read"] == 3
+    assert report["accounts"] == ["111111111111", "222222222222"]
+    assert report["distributions"] == ["E1EXAMPLE0001", "E1EXAMPLE0002"]
+
+
+def test_an_empty_log_file_counts_as_read_with_no_requests_not_as_skipped():
+    empty_key, empty_body = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "08")
+    real_key, real_body = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "09", REQUEST)
+
+    run = run_bronze({empty_key: empty_body, real_key: real_body})
+
+    assert run.report["files_read"] == 2
+    assert run.report["files_skipped"] == 0
+    assert run.report["requests_read"] == 1
+    assert run.table.height == 1
+
+
+def test_parse_log_file_raises_oserror_for_a_corrupt_gzip():
+    with pytest.raises(OSError):
+        parse_log_file(b"definitely not gzip")
+
+
+def test_parse_log_file_raises_valueerror_for_invalid_utf8():
+    with pytest.raises(ValueError):
+        parse_log_file(gzip.compress(b'{"c-ip": "\xff\xfe"}\n'))
+
+
+def test_parse_log_file_raises_valueerror_for_invalid_json():
+    body = gzip.compress((json.dumps(REQUEST) + "\n{this is not json\n").encode())
+
+    with pytest.raises(ValueError):
+        parse_log_file(body)
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        ["[1, 2, 3]"],  # nothing but a list
+        [json.dumps(REQUEST), "[1, 2, 3]"],  # a list among objects
+        [json.dumps(REQUEST), '"just a string"'],
+        [json.dumps(REQUEST), "42"],
+    ],
+)
+def test_parse_log_file_raises_valueerror_for_a_line_that_is_not_a_json_object(lines):
+    body = gzip.compress(("\n".join(lines) + "\n").encode())
+
+    with pytest.raises(ValueError):
+        parse_log_file(body)
+
+
+def test_an_unreadable_log_file_is_skipped_with_a_warning_and_the_rest_of_the_day_is_still_read():
+    good_early, good_early_body = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "09", REQUEST)
+    corrupt, _ = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "10", REQUEST)
+    bad_json, _ = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "11", REQUEST)
+    good_late, good_late_body = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "12", REQUEST)
+
+    run = run_bronze(
+        {
+            good_early: good_early_body,
+            corrupt: b"definitely not gzip",
+            bad_json: gzip.compress(b"{this is not json\n"),
+            good_late: good_late_body,
+        }
+    )
+
+    assert run.table["source_key"].to_list() == [good_early, good_late]
+    assert run.report["files_read"] == 2
+    assert run.report["files_skipped"] == 2
+    assert run.report["requests_read"] == 2
+    assert len(run.warnings) == 2
+    assert any(corrupt in warning for warning in run.warnings)
+    assert any(bad_json in warning for warning in run.warnings)

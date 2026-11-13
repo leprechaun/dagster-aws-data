@@ -79,10 +79,17 @@ def _column_name(field: str) -> str:
 
 def parse_log_file(body: bytes) -> pl.DataFrame:
     """A gzipped Log File as a table: one row per line, a column per delivered
-    field (named as delivered), plus the original line as `raw_json`."""
+    field (named as delivered), plus the original line as `raw_json`. Raises
+    OSError (bad gzip) or ValueError (bad encoding, bad JSON, or a line that
+    isn't a JSON object): a file is read whole or not at all."""
     text = gzip.decompress(body).decode("utf-8")
     lines = [line for line in text.splitlines() if line.strip()]
-    fields = pl.read_ndjson(io.BytesIO("\n".join(lines).encode()), infer_schema_length=None)
+    if not lines:
+        return pl.DataFrame({"raw_json": []}, schema={"raw_json": pl.Utf8})
+    try:
+        fields = pl.read_ndjson(io.BytesIO("\n".join(lines).encode()), infer_schema_length=None)
+    except (pl.exceptions.ComputeError, pl.exceptions.SchemaError) as e:
+        raise ValueError(str(e)) from e
     return fields.with_columns(pl.Series("raw_json", lines))
 
 
@@ -143,15 +150,31 @@ def cloudfront_requests(context: dg.AssetExecutionContext, minio_s3: S3Resource)
     client = minio_s3.get_client()
 
     frames = []
-    for account_id in list_accounts(client, STORAGE_BUCKET, RAW_ROOT_PREFIX):
-        for distribution_id in list_distributions(client, STORAGE_BUCKET, RAW_ROOT_PREFIX, account_id):
+    files_read = 0
+    files_skipped = 0
+    distributions_seen: set[str] = set()
+
+    accounts = list_accounts(client, STORAGE_BUCKET, RAW_ROOT_PREFIX)
+
+    for account_id in accounts:
+        distribution_ids = list_distributions(client, STORAGE_BUCKET, RAW_ROOT_PREFIX, account_id)
+        distributions_seen.update(distribution_ids)
+
+        for distribution_id in distribution_ids:
             for key in list_day_object_keys(
                 client, STORAGE_BUCKET, RAW_ROOT_PREFIX, account_id, distribution_id, partition_date
             ):
                 body = client.get_object(Bucket=STORAGE_BUCKET, Key=key)["Body"].read()
+                try:
+                    parsed = parse_log_file(body)
+                except (OSError, ValueError) as e:
+                    context.log.warning(f"Skipping unreadable CloudFront log file {key}: {e}")
+                    files_skipped += 1
+                    continue
+
                 frames.append(
                     clean_requests(
-                        parse_log_file(body),
+                        parsed,
                         partition_date,
                         account_id,
                         distribution_id,
@@ -159,5 +182,18 @@ def cloudfront_requests(context: dg.AssetExecutionContext, minio_s3: S3Resource)
                         datetime.now(timezone.utc),
                     )
                 )
+                files_read += 1
 
-    return pl.concat(frames) if frames else pl.DataFrame(schema=CLOUDFRONT_SCHEMA)
+    requests = pl.concat(frames) if frames else pl.DataFrame(schema=CLOUDFRONT_SCHEMA)
+
+    context.add_output_metadata(
+        {
+            "files_read": files_read,
+            "files_skipped": files_skipped,
+            "requests_read": requests.height,
+            "accounts": accounts,
+            "distributions": sorted(distributions_seen),
+        }
+    )
+
+    return requests
