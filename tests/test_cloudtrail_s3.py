@@ -78,3 +78,17 @@ class TestListDayObjectKeys:
 
     def test_day_without_files_is_empty(self, client):
         assert list_day_object_keys(client, "b", ROOT, ORG, "111111111111", "us-east-1", date(2020, 1, 1)) == []
+
+
+class TestNamespacing:
+    def test_raw_prefix_is_under_project_prefix(self):
+        from aws_data.lib.cloudtrail_s3 import PROJECT_PREFIX, RAW_PREFIX
+
+        assert RAW_PREFIX.startswith(f"{PROJECT_PREFIX}/")
+
+    def test_asset_keys_start_with_project_prefix(self):
+        from aws_data.defs.cloudtrail.cloudtrail_events import cloudtrail_events
+        from aws_data.defs.cloudtrail.cloudtrail_raw_files import cloudtrail_files
+
+        assert cloudtrail_files.key.path == ["aws-data", "raw", "cloudtrail_files"]
+        assert cloudtrail_events.key.path == ["aws-data", "bronze", "cloudtrail_events"]

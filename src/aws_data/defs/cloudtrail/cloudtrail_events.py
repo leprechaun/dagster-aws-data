@@ -9,6 +9,7 @@ from dagster_aws.s3 import S3Resource
 from aws_data.defs.cloudtrail.cloudtrail_raw_files import cloudtrail_files
 from aws_data.lib.cloudtrail_s3 import (
     CLOUDTRAIL_PARTITIONS_DEF,
+    PROJECT_PREFIX,
     RAW_BUCKET,
     RAW_PREFIX,
     SOURCE_PREFIX,
@@ -104,7 +105,7 @@ def _row_from_record(
 
 
 @dg.asset(
-    key_prefix="bronze",
+    key_prefix=[PROJECT_PREFIX, "bronze"],
     partitions_def=CLOUDTRAIL_PARTITIONS_DEF,
     group_name="cloudtrail",
     kinds={"s3", "deltalake"},

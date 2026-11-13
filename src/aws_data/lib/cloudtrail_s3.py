@@ -16,10 +16,17 @@ SOURCE_BUCKET = "lmacguire-aws-logs"
 SOURCE_REGION = "ap-southeast-1"
 SOURCE_PREFIX = "AWSLogs"
 
+# Everything this project owns on shared storage lives under this name: the
+# leading asset-key component, the Raw prefix below, and (via
+# MINIO_LAKEHOUSE_ROOT_URI) the Delta tables. The asset key alone doesn't
+# place Delta tables (only its last two parts do), so the root URI and
+# RAW_PREFIX must carry the namespace on their own.
+PROJECT_PREFIX = "aws-data"
+
 # Destination: raw files are mirrored 1:1 (same key layout) under this
 # prefix on MinIO, so re-processing bronze never has to re-download from AWS.
 RAW_BUCKET = "lakehouse"
-RAW_PREFIX = "raw/cloudtrail"
+RAW_PREFIX = f"{PROJECT_PREFIX}/raw/cloudtrail"
 
 # Adjust to the actual date this trail's logs begin if known; days with no
 # files simply materialize zero rows/copies, so an early guess is harmless.

@@ -6,6 +6,7 @@ from dagster_aws.s3 import S3Resource
 
 from aws_data.lib.cloudtrail_s3 import (
     CLOUDTRAIL_PARTITIONS_DEF,
+    PROJECT_PREFIX,
     RAW_BUCKET,
     RAW_PREFIX,
     SOURCE_BUCKET,
@@ -29,7 +30,7 @@ def _object_exists(client, bucket: str, key: str) -> bool:
 
 @dg.asset(
     name="cloudtrail_files",
-    key_prefix="raw",
+    key_prefix=[PROJECT_PREFIX, "raw"],
     partitions_def=CLOUDTRAIL_PARTITIONS_DEF,
     group_name="cloudtrail",
     kinds={"s3"},
