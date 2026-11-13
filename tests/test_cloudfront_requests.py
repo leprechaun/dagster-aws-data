@@ -7,6 +7,8 @@ import polars as pl
 from dagster._core.test_utils import freeze_time
 
 from aws_data.defs.cloudfront.cloudfront_requests import (
+    CLOUDFRONT_SCHEMA,
+    _column_name,
     _row_from_record,
     cloudfront_requests,
     parse_log_file,
@@ -34,6 +36,54 @@ REQUEST = {
     "sc-status": "200",
     "sc-bytes": "944",
     "time-taken": "0.537",
+}
+
+
+# A "narrow" delivery: fewer fields, but three the full one lacks.
+NARROW_REQUEST = {
+    **REQUEST,
+    "c-country": "US",
+    "asn": "64500",
+    "cs-bytes": "190",
+    "x-edge-result-type": "Miss",
+    "cache-behavior-path-pattern": "*",
+}
+
+# A "full" delivery: every field, including CloudFront's parenthesised names.
+FULL_REQUEST = {
+    "date": "2026-11-13",
+    "time": "23:59:58",
+    "x-edge-location": "SIN52-P1",
+    "sc-bytes": "1024",
+    "c-ip": "203.0.113.9",
+    "cs-method": "GET",
+    "cs(Host)": "d111111abcdef8.cloudfront.net",
+    "cs-uri-stem": "/index.html",
+    "sc-status": "304",
+    "cs(Referer)": "https://example.com/",
+    "cs(User-Agent)": "Mozilla/5.0",
+    "cs-uri-query": "a=1",
+    "cs(Cookie)": "-",
+    "x-edge-result-type": "Hit",
+    "x-edge-request-id": "req-1",
+    "x-host-header": "www.example.com",
+    "cs-protocol": "https",
+    "cs-bytes": "300",
+    "time-taken": "0.002",
+    "x-forwarded-for": "-",
+    "ssl-protocol": "TLSv1.3",
+    "ssl-cipher": "TLS_AES_128_GCM_SHA256",
+    "x-edge-response-result-type": "Hit",
+    "cs-protocol-version": "HTTP/2.0",
+    "fle-status": "-",
+    "fle-encrypted-fields": "-",
+    "c-port": "51234",
+    "time-to-first-byte": "0.001",
+    "x-edge-detailed-result-type": "Hit",
+    "sc-content-type": "text/html",
+    "sc-content-len": "1024",
+    "sc-range-start": "-",
+    "sc-range-end": "-",
 }
 
 
@@ -173,7 +223,8 @@ def test_row_from_record_maps_one_line_to_one_row():
 
     row = _row_from_record(REQUEST, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "raw/some/key.gz", ingested_at)
 
-    assert row == {
+    populated = {column: value for column, value in row.items() if value is not None}
+    assert populated == {
         "request_date": date(2026, 11, 13),
         "request_time": datetime(2026, 11, 13, 9, 13, 40, tzinfo=timezone.utc),
         "account_id": ACCOUNT,
@@ -183,17 +234,108 @@ def test_row_from_record_maps_one_line_to_one_row():
         "cs_method": "GET",
         "x_host_header": "www.example.com",
         "cs_uri_stem": "/",
-        "cs_uri_query": None,
         "sc_status": 200,
         "sc_bytes": 944,
-        "cs_bytes": None,
-        "c_port": None,
-        "sc_content_len": None,
-        "sc_range_start": None,
-        "sc_range_end": None,
         "time_taken": 0.537,
-        "time_to_first_byte": None,
         "source_key": "raw/some/key.gz",
         "ingested_at": ingested_at,
         "raw_json": json.dumps(REQUEST),
     }
+
+
+def test_a_full_delivery_line_maps_its_parenthesised_and_extra_fields():
+    key, body = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "23", FULL_REQUEST)
+
+    row = bronze_table({key: body}).row(0, named=True)
+
+    assert row["cs_host"] == "d111111abcdef8.cloudfront.net"
+    assert row["cs_user_agent"] == "Mozilla/5.0"
+    assert row["cs_referer"] == "https://example.com/"
+    assert row["cs_cookie"] is None
+    assert row["x_edge_request_id"] == "req-1"
+    assert row["ssl_protocol"] == "TLSv1.3"
+    assert row["cs_protocol_version"] == "HTTP/2.0"
+    assert row["sc_content_type"] == "text/html"
+    assert row["c_port"] == 51234
+    assert row["sc_content_len"] == 1024
+    assert row["time_to_first_byte"] == 0.001
+
+
+def test_a_narrow_delivery_line_maps_the_fields_only_it_has():
+    key, body = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "09", NARROW_REQUEST)
+
+    row = bronze_table({key: body}).row(0, named=True)
+
+    assert row["c_country"] == "US"
+    assert row["asn"] == "64500"
+    assert row["cache_behavior_path_pattern"] == "*"
+    assert row["x_edge_result_type"] == "Miss"
+    assert row["cs_bytes"] == 190
+
+
+def test_both_delivery_shapes_land_in_one_table_with_nulls_for_the_fields_a_delivery_lacks():
+    narrow_key, narrow_body = raw_log_file("111111111111", "E1EXAMPLE0001", "2026-11-13", "09", NARROW_REQUEST)
+    full_key, full_body = raw_log_file("222222222222", "E1EXAMPLE0002", "2026-11-13", "09", FULL_REQUEST)
+
+    table = bronze_table({narrow_key: narrow_body, full_key: full_body})
+
+    narrow, full = table.sort("account_id").rows(named=True)
+    assert table.height == 2
+    assert (narrow["c_country"], narrow["cs_user_agent"]) == ("US", None)
+    assert (full["c_country"], full["cs_user_agent"]) == (None, "Mozilla/5.0")
+    assert narrow["x_edge_location"] == "HEL51-P5" and full["x_edge_location"] == "SIN52-P1"
+
+
+def test_a_field_with_no_column_is_kept_only_in_the_original_line():
+    with_new_field = {**REQUEST, "brand-new-field": "surprise"}
+    key, body = raw_log_file(ACCOUNT, DISTRIBUTION, "2026-11-13", "09", with_new_field)
+
+    table = bronze_table({key: body})
+
+    assert "brand_new_field" not in table.columns
+    assert json.loads(table["raw_json"][0]) == with_new_field
+
+
+def test_a_number_that_does_not_parse_becomes_null_and_the_rest_of_the_row_survives():
+    garbled = {**REQUEST, "sc-status": "abc", "time-taken": "fast"}
+
+    row = _row_from_record(garbled, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "k", datetime.now(timezone.utc))
+
+    assert row["sc_status"] is None
+    assert row["time_taken"] is None
+    assert row["sc_bytes"] == 944
+    assert row["x_edge_location"] == "HEL51-P5"
+
+
+def test_a_000_status_from_an_aborted_request_is_kept_as_zero_not_missing():
+    aborted = {**REQUEST, "sc-status": "000"}
+
+    row = _row_from_record(aborted, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "k", datetime.now(timezone.utc))
+
+    assert row["sc_status"] == 0
+
+
+def test_a_missing_or_malformed_date_or_time_gives_a_null_request_time():
+    def request_time(record: dict):
+        row = _row_from_record(record, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "k", datetime.now(timezone.utc))
+        return row["request_time"]
+
+    assert request_time({}) is None
+    assert request_time({"date": "2026-11-13"}) is None
+    assert request_time({"time": "09:13:40"}) is None
+    assert request_time({"date": "2026-11-13", "time": "25:00:00"}) is None
+    assert request_time({"date": "yesterday", "time": "09:13:40"}) is None
+    assert request_time({"date": "-", "time": "-"}) is None
+
+
+def test_every_row_from_either_shape_has_exactly_the_tables_columns():
+    for record in (NARROW_REQUEST, FULL_REQUEST, {}):
+        row = _row_from_record(record, date(2026, 11, 13), ACCOUNT, DISTRIBUTION, "k", datetime.now(timezone.utc))
+        assert list(row) == list(CLOUDFRONT_SCHEMA)
+
+
+def test_every_field_either_delivery_sends_has_a_column():
+    sent = {_column_name(field) for record in (NARROW_REQUEST, FULL_REQUEST) for field in record}
+
+    # date and time are combined into request_time
+    assert sent - {"date", "time"} <= set(CLOUDFRONT_SCHEMA)

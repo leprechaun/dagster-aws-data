@@ -1,5 +1,6 @@
 import gzip
 import json
+import re
 from datetime import date, datetime, timezone
 
 import dagster as dg
@@ -31,6 +32,25 @@ STRING_COLUMNS = [
     "x_host_header",
     "cs_uri_stem",
     "cs_uri_query",
+    "cs_host",
+    "cs_referer",
+    "cs_user_agent",
+    "cs_cookie",
+    "x_edge_result_type",
+    "x_edge_request_id",
+    "cs_protocol",
+    "x_forwarded_for",
+    "ssl_protocol",
+    "ssl_cipher",
+    "x_edge_response_result_type",
+    "cs_protocol_version",
+    "fle_status",
+    "fle_encrypted_fields",
+    "x_edge_detailed_result_type",
+    "sc_content_type",
+    "c_country",
+    "asn",
+    "cache_behavior_path_pattern",
 ]
 INT_COLUMNS = ["sc_status", "sc_bytes", "cs_bytes", "c_port", "sc_content_len", "sc_range_start", "sc_range_end"]
 FLOAT_COLUMNS = ["time_taken", "time_to_first_byte"]
@@ -52,17 +72,28 @@ CLOUDFRONT_SCHEMA = {
 }
 
 
+def _column_name(field: str) -> str:
+    """CloudFront field name -> column name: "cs(User-Agent)" -> "cs_user_agent"."""
+    return re.sub(r"[^a-z0-9]+", "_", field.lower()).strip("_")
+
+
 def _clean(value):
     """CloudFront writes "-" for a missing value."""
     return None if value in (None, "", "-") else value
 
 
 def _to_int(value) -> int | None:
-    return None if value is None else int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _to_float(value) -> float | None:
-    return None if value is None else float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_log_file(body: bytes) -> list[dict]:
@@ -71,13 +102,20 @@ def parse_log_file(body: bytes) -> list[dict]:
     return [json.loads(line) for line in text.splitlines()]
 
 
+def _parse_request_time(day: str | None, time: str | None) -> datetime | None:
+    if not day or not time:
+        return None
+    try:
+        return datetime.strptime(f"{day} {time}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
 def _row_from_record(
     record: dict, request_date: date, account_id: str, distribution_id: str, source_key: str, ingested_at: datetime
 ) -> dict:
-    fields = {name.lower().replace("-", "_"): _clean(value) for name, value in record.items()}
-    request_time = datetime.strptime(f"{fields['date']} {fields['time']}", "%Y-%m-%d %H:%M:%S").replace(
-        tzinfo=timezone.utc
-    )
+    fields = {_column_name(name): _clean(value) for name, value in record.items()}
+    request_time = _parse_request_time(fields.get("date"), fields.get("time"))
     return {
         "request_date": request_date,
         "request_time": request_time,
