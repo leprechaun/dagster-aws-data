@@ -8,12 +8,12 @@ from aws_data.lib.cloudfront_s3 import (
     CLOUDFRONT_RAW_PREFIX,
     CLOUDFRONT_SOURCE_BUCKET,
     CLOUDFRONT_SOURCE_PREFIX,
+    day_prefix,
     list_accounts,
-    list_day_object_keys,
     list_distributions,
 )
 from aws_data.lib.cloudtrail_s3 import PROJECT_PREFIX, STORAGE_BUCKET
-from aws_data.lib.s3 import object_exists
+from aws_data.lib.s3 import mirror_prefixes
 
 
 @dg.asset(
@@ -34,10 +34,8 @@ def cloudfront_files(context: dg.AssetExecutionContext, aws_s3: S3Resource, mini
     source_client = aws_s3.get_client()
     dest_client = minio_s3.get_client()
 
-    files_copied = 0
-    files_already_cached = 0
-    bytes_copied = 0
     distributions_seen: set[str] = set()
+    prefixes: list[str] = []
 
     accounts = list_accounts(source_client, CLOUDFRONT_SOURCE_BUCKET, CLOUDFRONT_SOURCE_PREFIX)
 
@@ -46,31 +44,20 @@ def cloudfront_files(context: dg.AssetExecutionContext, aws_s3: S3Resource, mini
             source_client, CLOUDFRONT_SOURCE_BUCKET, CLOUDFRONT_SOURCE_PREFIX, account_id
         )
         distributions_seen.update(distribution_ids)
+        prefixes += [
+            day_prefix(CLOUDFRONT_SOURCE_PREFIX, account_id, distribution_id, partition_date)
+            for distribution_id in distribution_ids
+        ]
 
-        for distribution_id in distribution_ids:
-            for key in list_day_object_keys(
-                source_client,
-                CLOUDFRONT_SOURCE_BUCKET,
-                CLOUDFRONT_SOURCE_PREFIX,
-                account_id,
-                distribution_id,
-                partition_date,
-            ):
-                dest_key = f"{CLOUDFRONT_RAW_PREFIX}/{key}"
-                if object_exists(dest_client, STORAGE_BUCKET, dest_key):
-                    files_already_cached += 1
-                    continue
-
-                body = source_client.get_object(Bucket=CLOUDFRONT_SOURCE_BUCKET, Key=key)["Body"].read()
-                dest_client.put_object(Bucket=STORAGE_BUCKET, Key=dest_key, Body=body)
-                files_copied += 1
-                bytes_copied += len(body)
+    mirrored = mirror_prefixes(
+        source_client, CLOUDFRONT_SOURCE_BUCKET, prefixes, ".gz", dest_client, STORAGE_BUCKET, CLOUDFRONT_RAW_PREFIX
+    )
 
     context.add_output_metadata(
         {
-            "files_copied": files_copied,
-            "files_already_cached": files_already_cached,
-            "bytes_copied": bytes_copied,
+            "files_copied": mirrored.files_copied,
+            "files_already_cached": mirrored.files_already_cached,
+            "bytes_copied": mirrored.bytes_copied,
             "accounts": accounts,
             "distributions": sorted(distributions_seen),
         }

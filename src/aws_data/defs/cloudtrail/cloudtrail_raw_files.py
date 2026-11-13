@@ -10,12 +10,12 @@ from aws_data.lib.cloudtrail_s3 import (
     SOURCE_BUCKET,
     SOURCE_PREFIX,
     STORAGE_BUCKET,
+    day_prefix,
     list_accounts,
-    list_day_object_keys,
     list_organizations,
     list_regions,
 )
-from aws_data.lib.s3 import object_exists
+from aws_data.lib.s3 import mirror_prefixes
 
 
 @dg.asset(
@@ -38,11 +38,9 @@ def cloudtrail_files(context: dg.AssetExecutionContext, aws_s3: S3Resource, mini
     source_client = aws_s3.get_client()
     dest_client = minio_s3.get_client()
 
-    files_copied = 0
-    files_already_cached = 0
-    bytes_copied = 0
     accounts_seen: set[str] = set()
     regions_seen: set[str] = set()
+    prefixes: list[str] = []
 
     organizations = list_organizations(source_client, SOURCE_BUCKET, SOURCE_PREFIX)
 
@@ -53,32 +51,19 @@ def cloudtrail_files(context: dg.AssetExecutionContext, aws_s3: S3Resource, mini
         for account_id in account_ids:
             regions = list_regions(source_client, SOURCE_BUCKET, SOURCE_PREFIX, organization_id, account_id)
             regions_seen.update(regions)
+            prefixes += [
+                day_prefix(SOURCE_PREFIX, organization_id, account_id, region, partition_date) for region in regions
+            ]
 
-            for region in regions:
-                for key in list_day_object_keys(
-                    source_client,
-                    SOURCE_BUCKET,
-                    SOURCE_PREFIX,
-                    organization_id,
-                    account_id,
-                    region,
-                    partition_date,
-                ):
-                    dest_key = f"{RAW_PREFIX}/{key}"
-                    if object_exists(dest_client, STORAGE_BUCKET, dest_key):
-                        files_already_cached += 1
-                        continue
-
-                    body = source_client.get_object(Bucket=SOURCE_BUCKET, Key=key)["Body"].read()
-                    dest_client.put_object(Bucket=STORAGE_BUCKET, Key=dest_key, Body=body)
-                    files_copied += 1
-                    bytes_copied += len(body)
+    mirrored = mirror_prefixes(
+        source_client, SOURCE_BUCKET, prefixes, ".json.gz", dest_client, STORAGE_BUCKET, RAW_PREFIX
+    )
 
     context.add_output_metadata(
         {
-            "files_copied": files_copied,
-            "files_already_cached": files_already_cached,
-            "bytes_copied": bytes_copied,
+            "files_copied": mirrored.files_copied,
+            "files_already_cached": mirrored.files_already_cached,
+            "bytes_copied": mirrored.bytes_copied,
             "organizations": organizations,
             "accounts": sorted(accounts_seen),
             "regions": sorted(regions_seen),
