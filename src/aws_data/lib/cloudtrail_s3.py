@@ -28,9 +28,9 @@ PROJECT_PREFIX = "aws-data"
 RAW_BUCKET = "lakehouse"
 RAW_PREFIX = f"{PROJECT_PREFIX}/raw/cloudtrail"
 
-# Adjust to the actual date this trail's logs begin if known; days with no
-# files simply materialize zero rows/copies, so an early guess is harmless.
-HISTORY_START_DATE = "2016-01-01"
+# The first day this trail delivered logs. Earlier days have no Log Files, so
+# they would only add empty partitions.
+HISTORY_START_DATE = "2026-08-23"
 
 CLOUDTRAIL_PARTITIONS_DEF = dg.DailyPartitionsDefinition(start_date=HISTORY_START_DATE)
 

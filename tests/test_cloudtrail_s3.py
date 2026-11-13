@@ -92,3 +92,9 @@ class TestNamespacing:
 
         assert cloudtrail_files.key.path == ["aws-data", "raw", "cloudtrail_files"]
         assert cloudtrail_events.key.path == ["aws-data", "bronze", "cloudtrail_events"]
+
+
+def test_partitions_start_on_the_first_delivery_day():
+    from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
+
+    assert CLOUDTRAIL_PARTITIONS_DEF.get_first_partition_key() == "2026-08-23"
