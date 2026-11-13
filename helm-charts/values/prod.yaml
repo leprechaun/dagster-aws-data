@@ -1,0 +1,27 @@
+---
+global:
+  postgresqlSecretName: "dagster-postgresql-secret"
+  postgresqlAuthWifEnabled: false
+  dagsterHome: "/opt/dagster/dagster_home"
+  serviceAccountName: ""
+  celeryConfigSecretName: "dagster-celery-config-secret"
+  dagsterInstanceConfigMap: ""
+
+dagsterHome: "/opt/dagster/dagster_home"
+postgresqlSecretName: "dagster-postgresql-secret"
+celeryConfigSecretName: "dagster-celery-config-secret"
+
+deployments:
+- name: "aws-data"
+  image:
+    repository: "ghcr.io/leprechaun/dagster-aws-data"
+    tag: "VERSION"
+    pullPolicy: Always
+
+  dagsterApiGrpcArgs:
+    - "--python-file"
+    - "/deploy_k8s/src/aws_data/definitions.py"
+  port: 3030
+  envSecrets:
+    - name: dagster-shared
+    - name: aws-data
