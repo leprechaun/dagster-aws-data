@@ -120,6 +120,8 @@ jobs:
 
           sudo ip link set up dev wg0
 
+          sudo ip route add ${{ secrets.WIREGUARD_ALLOWED_ADDRESSES }} dev wg0
+
       - name: Set up kubeconfig
         run: |
           mkdir -p $HOME/.kube
