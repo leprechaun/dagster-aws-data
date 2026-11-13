@@ -16,8 +16,8 @@ def minio_ambient_env(monkeypatch):
 
 
 def test_source_client_ignores_ambient_minio_endpoint(minio_ambient_env):
-    client = aws_source_s3("src-key", "src-secret", region="ap-southeast-1").get_client()
-    assert client.meta.endpoint_url == "https://s3.ap-southeast-1.amazonaws.com"
+    client = aws_source_s3("src-key", "src-secret", region="us-east-1").get_client()
+    assert client.meta.endpoint_url == "https://s3.us-east-1.amazonaws.com"
 
 
 def test_source_client_ignores_ambient_credentials(minio_ambient_env):
@@ -27,5 +27,5 @@ def test_source_client_ignores_ambient_credentials(minio_ambient_env):
 
 def test_source_client_uses_bucket_region():
     client = aws_source_s3("k", "s").get_client()
-    assert client.meta.region_name == "ap-southeast-1"
+    assert client.meta.region_name == "us-east-1"
 
