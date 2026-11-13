@@ -3,7 +3,7 @@ from dagster_aws.s3 import S3Resource
 from dagster_deltalake import S3Config
 from dagster_deltalake_polars import DeltaLakePolarsIOManager
 
-from aws_data.lib.cloudtrail_s3 import SOURCE_REGION
+from aws_data.lib.cloudtrail_s3 import PROJECT_PREFIX, SOURCE_REGION, STORAGE_BUCKET
 
 
 def aws_source_s3(
@@ -61,8 +61,10 @@ def resources() -> dg.Definitions:
     # Delta tables on MinIO. Table location is <root_uri>/<schema>/<table>,
     # where <schema> is taken from an asset's key_prefix and <table> from its
     # name - so key_prefix maps 1:1 to the medallion layer (bronze/silver/gold).
+    # Only those last two asset-key parts place a table, so the project
+    # namespace lives in the root: s3://<bucket>/<project>, beside the Raw files.
     deltalake_io_manager = DeltaLakePolarsIOManager(
-        root_uri=dg.EnvVar("MINIO_LAKEHOUSE_ROOT_URI"),
+        root_uri=f"s3://{STORAGE_BUCKET}/{PROJECT_PREFIX}",
         storage_options=S3Config(
             access_key_id=dg.EnvVar("AWS_ACCESS_KEY_ID"),
             secret_access_key=dg.EnvVar("AWS_SECRET_ACCESS_KEY"),

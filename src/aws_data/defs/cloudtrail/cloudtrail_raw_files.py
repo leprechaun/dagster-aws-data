@@ -7,10 +7,10 @@ from dagster_aws.s3 import S3Resource
 from aws_data.lib.cloudtrail_s3 import (
     CLOUDTRAIL_PARTITIONS_DEF,
     PROJECT_PREFIX,
-    RAW_BUCKET,
     RAW_PREFIX,
     SOURCE_BUCKET,
     SOURCE_PREFIX,
+    STORAGE_BUCKET,
     list_accounts,
     list_day_object_keys,
     list_organizations,
@@ -75,12 +75,12 @@ def cloudtrail_files(context: dg.AssetExecutionContext, aws_s3: S3Resource, mini
                     partition_date,
                 ):
                     dest_key = f"{RAW_PREFIX}/{key}"
-                    if _object_exists(dest_client, RAW_BUCKET, dest_key):
+                    if _object_exists(dest_client, STORAGE_BUCKET, dest_key):
                         files_already_cached += 1
                         continue
 
                     body = source_client.get_object(Bucket=SOURCE_BUCKET, Key=key)["Body"].read()
-                    dest_client.put_object(Bucket=RAW_BUCKET, Key=dest_key, Body=body)
+                    dest_client.put_object(Bucket=STORAGE_BUCKET, Key=dest_key, Body=body)
                     files_copied += 1
                     bytes_copied += len(body)
 

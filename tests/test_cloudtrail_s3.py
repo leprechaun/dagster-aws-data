@@ -94,6 +94,15 @@ class TestListDayObjectKeys:
 
 
 class TestNamespacing:
+    def test_delta_root_and_raw_files_share_the_project_namespace(self):
+        from aws_data.defs.resources import resources
+        from aws_data.lib.cloudtrail_s3 import RAW_PREFIX, STORAGE_BUCKET
+
+        delta_root = resources().resources["io_manager"].root_uri
+
+        assert delta_root == "s3://deltalake/aws-data"
+        assert f"s3://{STORAGE_BUCKET}/{RAW_PREFIX}".startswith(f"{delta_root}/")
+
     def test_raw_prefix_is_under_project_prefix(self):
         from aws_data.lib.cloudtrail_s3 import PROJECT_PREFIX, RAW_PREFIX
 

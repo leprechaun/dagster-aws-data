@@ -10,9 +10,9 @@ from aws_data.defs.cloudtrail.cloudtrail_raw_files import cloudtrail_files
 from aws_data.lib.cloudtrail_s3 import (
     CLOUDTRAIL_PARTITIONS_DEF,
     PROJECT_PREFIX,
-    RAW_BUCKET,
     RAW_PREFIX,
     SOURCE_PREFIX,
+    STORAGE_BUCKET,
     list_accounts,
     list_day_object_keys,
     list_organizations,
@@ -122,7 +122,7 @@ def cloudtrail_events(context: dg.AssetExecutionContext, minio_s3: S3Resource) -
     partition_date = date.fromisoformat(context.partition_key)
     client = minio_s3.get_client()
 
-    organizations = list_organizations(client, RAW_BUCKET, RAW_ROOT_PREFIX)
+    organizations = list_organizations(client, STORAGE_BUCKET, RAW_ROOT_PREFIX)
 
     rows = []
     files_read = 0
@@ -131,19 +131,19 @@ def cloudtrail_events(context: dg.AssetExecutionContext, minio_s3: S3Resource) -
     regions_seen: set[str] = set()
 
     for organization_id in organizations:
-        account_ids = list_accounts(client, RAW_BUCKET, RAW_ROOT_PREFIX, organization_id)
+        account_ids = list_accounts(client, STORAGE_BUCKET, RAW_ROOT_PREFIX, organization_id)
         accounts_seen.update(account_ids)
 
         for account_id in account_ids:
-            regions = list_regions(client, RAW_BUCKET, RAW_ROOT_PREFIX, organization_id, account_id)
+            regions = list_regions(client, STORAGE_BUCKET, RAW_ROOT_PREFIX, organization_id, account_id)
             regions_seen.update(regions)
 
             for region in regions:
                 for key in list_day_object_keys(
-                    client, RAW_BUCKET, RAW_ROOT_PREFIX, organization_id, account_id, region, partition_date
+                    client, STORAGE_BUCKET, RAW_ROOT_PREFIX, organization_id, account_id, region, partition_date
                 ):
                     try:
-                        body = client.get_object(Bucket=RAW_BUCKET, Key=key)["Body"].read()
+                        body = client.get_object(Bucket=STORAGE_BUCKET, Key=key)["Body"].read()
                         records = json.loads(gzip.decompress(body)).get("Records", [])
                     except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
                         context.log.warning(f"Skipping unreadable CloudTrail file {key}: {e}")

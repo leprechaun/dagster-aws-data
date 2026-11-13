@@ -17,15 +17,17 @@ SOURCE_REGION = "us-east-1"
 SOURCE_PREFIX = "AWSLogs"
 
 # Everything this project owns on shared infrastructure lives under this name:
-# the leading asset-key component, the Dagster concurrency pool, the Raw prefix
-# below, and (via MINIO_LAKEHOUSE_ROOT_URI) the Delta tables. The asset key alone doesn't
-# place Delta tables (only its last two parts do), so the root URI and
-# RAW_PREFIX must carry the namespace on their own.
+# the leading asset-key component, the Dagster concurrency pool, and the
+# prefix inside the storage bucket (Raw files and Delta tables alike).
 PROJECT_PREFIX = "aws-data"
 
-# Destination: raw files are mirrored 1:1 (same key layout) under this
-# prefix on MinIO, so re-processing bronze never has to re-download from AWS.
-RAW_BUCKET = "deltalake"
+# Destination: one MinIO bucket shared with other projects. Our part of it is
+# s3://<bucket>/<PROJECT_PREFIX>, which is also the root the Delta IO manager
+# writes tables under (see resources.py).
+STORAGE_BUCKET = "deltalake"
+
+# Raw files are mirrored 1:1 (same key layout) beside the tables, so
+# re-processing bronze never has to re-download from AWS.
 RAW_PREFIX = f"{PROJECT_PREFIX}/raw/cloudtrail"
 
 # The first day this trail delivered logs. Earlier days have no Log Files, so
