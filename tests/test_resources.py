@@ -28,3 +28,4 @@ def test_source_client_ignores_ambient_credentials(minio_ambient_env):
 def test_source_client_uses_bucket_region():
     client = aws_source_s3("k", "s").get_client()
     assert client.meta.region_name == "ap-southeast-1"
+

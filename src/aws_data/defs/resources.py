@@ -1,16 +1,9 @@
-import os
-
 import dagster as dg
 from dagster_aws.s3 import S3Resource
 from dagster_deltalake import S3Config
-from dagster_deltalake.config import ClientConfig
 from dagster_deltalake_polars import DeltaLakePolarsIOManager
 
 from aws_data.lib.cloudtrail_s3 import SOURCE_REGION
-
-
-def _minio_use_ssl() -> bool:
-    return os.getenv("MINIO_USE_SSL", "false").strip().lower() in ("1", "true", "yes")
 
 
 def aws_source_s3(
@@ -47,20 +40,21 @@ class RawFilesIOManager(dg.ConfigurableIOManager):
 @dg.definitions
 def resources() -> dg.Definitions:
     # Source data: real AWS S3, with its own SOURCE_AWS_* credentials. The
-    # plain AWS_* variables are not used: they belong to other pipelines
-    # sharing this environment and point at MinIO.
+    # plain AWS_* variables are not used here: in this environment they point
+    # at MinIO (see below).
     aws_s3 = aws_source_s3(
         dg.EnvVar("SOURCE_AWS_ACCESS_KEY_ID"),
         dg.EnvVar("SOURCE_AWS_SECRET_ACCESS_KEY"),
     )
 
-    # Storage: MinIO running on the k3s cluster, spoken to via the S3-compatible API.
+    # Storage: MinIO running on the k3s cluster, spoken to via the S3-compatible
+    # API. It uses the standard AWS_* variables (shared with the other
+    # pipelines on this cluster), passed explicitly rather than left to boto3.
     minio_s3 = S3Resource(
-        endpoint_url=dg.EnvVar("MINIO_ENDPOINT"),
-        aws_access_key_id=dg.EnvVar("MINIO_ACCESS_KEY"),
-        aws_secret_access_key=dg.EnvVar("MINIO_SECRET_KEY"),
+        endpoint_url=dg.EnvVar("AWS_ENDPOINT_URL_S3"),
+        aws_access_key_id=dg.EnvVar("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=dg.EnvVar("AWS_SECRET_ACCESS_KEY"),
         region_name="us-east-1",
-        use_ssl=_minio_use_ssl(),
     )
 
     # Default IO manager for table-shaped assets: writes Polars DataFrames to
@@ -70,16 +64,15 @@ def resources() -> dg.Definitions:
     deltalake_io_manager = DeltaLakePolarsIOManager(
         root_uri=dg.EnvVar("MINIO_LAKEHOUSE_ROOT_URI"),
         storage_options=S3Config(
-            access_key_id=dg.EnvVar("MINIO_ACCESS_KEY"),
-            secret_access_key=dg.EnvVar("MINIO_SECRET_KEY"),
-            endpoint=dg.EnvVar("MINIO_ENDPOINT"),
+            access_key_id=dg.EnvVar("AWS_ACCESS_KEY_ID"),
+            secret_access_key=dg.EnvVar("AWS_SECRET_ACCESS_KEY"),
+            endpoint=dg.EnvVar("AWS_ENDPOINT_URL_S3"),
             region="us-east-1",
             # MinIO isn't guaranteed to support the conditional-put semantics
             # delta-rs otherwise relies on for safe concurrent commits, so
             # writers to the same table must not run with concurrency > 1.
             allow_unsafe_rename=True,
         ),
-        client_options=ClientConfig(allow_http=not _minio_use_ssl()),
     )
 
     return dg.Definitions(
