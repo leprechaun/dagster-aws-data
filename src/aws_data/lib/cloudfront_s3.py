@@ -21,7 +21,10 @@ CLOUDFRONT_RAW_PREFIX = f"{PROJECT_PREFIX}/raw/cloudfront"
 # The first day logs were delivered to the bucket.
 CLOUDFRONT_HISTORY_START_DATE = "2026-11-13"
 
-CLOUDFRONT_PARTITIONS_DEF = dg.DailyPartitionsDefinition(start_date=CLOUDFRONT_HISTORY_START_DATE)
+# end_offset=1 makes the day in progress a partition too. Both layers are
+# idempotent per day (Raw skips what it already has, Bronze replaces the day's
+# partition), so a partial day can safely be rerun once more files arrive.
+CLOUDFRONT_PARTITIONS_DEF = dg.DailyPartitionsDefinition(start_date=CLOUDFRONT_HISTORY_START_DATE, end_offset=1)
 
 
 def is_account_id(name: str) -> bool:

@@ -36,7 +36,10 @@ RAW_PREFIX = f"{PROJECT_PREFIX}/raw/cloudtrail"
 # they would only add empty partitions.
 HISTORY_START_DATE = "2026-08-23"
 
-CLOUDTRAIL_PARTITIONS_DEF = dg.DailyPartitionsDefinition(start_date=HISTORY_START_DATE)
+# end_offset=1 makes the day in progress a partition too. Both layers are
+# idempotent per day (Raw skips what it already has, Bronze replaces the day's
+# partition), so a partial day can safely be rerun once more files arrive.
+CLOUDTRAIL_PARTITIONS_DEF = dg.DailyPartitionsDefinition(start_date=HISTORY_START_DATE, end_offset=1)
 
 
 def is_organization_id(name: str) -> bool:
