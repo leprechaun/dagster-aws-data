@@ -11,6 +11,8 @@ from datetime import date
 
 import dagster as dg
 
+from aws_data.lib.s3 import list_common_prefixes
+
 # Source: the CloudTrail organization trail's S3 destination bucket.
 SOURCE_BUCKET = "lmacguire-aws-logs"
 SOURCE_REGION = "us-east-1"
@@ -35,15 +37,6 @@ RAW_PREFIX = f"{PROJECT_PREFIX}/raw/cloudtrail"
 HISTORY_START_DATE = "2026-08-23"
 
 CLOUDTRAIL_PARTITIONS_DEF = dg.DailyPartitionsDefinition(start_date=HISTORY_START_DATE)
-
-
-def list_common_prefixes(client, bucket: str, prefix: str) -> list[str]:
-    paginator = client.get_paginator("list_objects_v2")
-    prefixes = []
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix, Delimiter="/"):
-        for common_prefix in page.get("CommonPrefixes", []):
-            prefixes.append(common_prefix["Prefix"])
-    return prefixes
 
 
 def is_organization_id(name: str) -> bool:

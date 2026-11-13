@@ -1,7 +1,6 @@
 from datetime import date
 
 import dagster as dg
-from botocore.exceptions import ClientError
 from dagster_aws.s3 import S3Resource
 
 from aws_data.lib.cloudtrail_s3 import (
@@ -16,16 +15,7 @@ from aws_data.lib.cloudtrail_s3 import (
     list_organizations,
     list_regions,
 )
-
-
-def _object_exists(client, bucket: str, key: str) -> bool:
-    try:
-        client.head_object(Bucket=bucket, Key=key)
-        return True
-    except ClientError as e:
-        if e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey"):
-            return False
-        raise
+from aws_data.lib.s3 import object_exists
 
 
 @dg.asset(
@@ -75,7 +65,7 @@ def cloudtrail_files(context: dg.AssetExecutionContext, aws_s3: S3Resource, mini
                     partition_date,
                 ):
                     dest_key = f"{RAW_PREFIX}/{key}"
-                    if _object_exists(dest_client, STORAGE_BUCKET, dest_key):
+                    if object_exists(dest_client, STORAGE_BUCKET, dest_key):
                         files_already_cached += 1
                         continue
 
