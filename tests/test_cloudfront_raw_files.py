@@ -1,41 +1,23 @@
-from datetime import datetime, timezone
-
 import dagster as dg
 from dagster._core.test_utils import freeze_time
 
 from aws_data.defs.cloudfront.cloudfront_raw_files import cloudfront_files
-from tests.conftest import FakeS3Client
+from tests.conftest import (
+    AFTER_THE_DAYS_UNDER_TEST,
+    FakeS3Client,
+    FakeS3Resource,
+    log_file,
+)
 
 ACCOUNT = "111111111111"
 DISTRIBUTION = "E1EXAMPLE0001"
 LOG_FILE = f"AWSLogs/{ACCOUNT}/CloudFront/{DISTRIBUTION}/2026/11/13/09/{DISTRIBUTION}.2026-11-13-09.aaaa1111.gz"
 
 
-def log_file(account: str, distribution: str, day: str, hour: str, suffix: str = "aaaa1111") -> str:
-    year, month, dom = day.split("-")
-    return (
-        f"AWSLogs/{account}/CloudFront/{distribution}/{year}/{month}/{dom}/{hour}/"
-        f"{distribution}.{day}-{hour}.{suffix}.gz"
-    )
-
-
 def reported(result: dg.ExecuteInProcessResult) -> dict:
     """What the run reported about itself, as plain values."""
     [materialization] = result.asset_materializations_for_node("aws_data__raw__cloudfront_files")
     return {name: value.value for name, value in materialization.metadata.items()}
-
-
-class FakeS3Resource:
-    def __init__(self, client: FakeS3Client):
-        self._client = client
-
-    def get_client(self) -> FakeS3Client:
-        return self._client
-
-
-# A day's partition only exists once that day has ended, so run "after" the
-# days under test instead of depending on today's date.
-AFTER_THE_DAYS_UNDER_TEST = datetime(2026, 12, 1, tzinfo=timezone.utc)
 
 
 def mirror(source: FakeS3Client, raw: FakeS3Client, partition_key: str = "2026-11-13") -> dg.ExecuteInProcessResult:

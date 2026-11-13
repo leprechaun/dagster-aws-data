@@ -1,4 +1,5 @@
 import io
+from datetime import datetime, timezone
 
 from botocore.exceptions import ClientError
 
@@ -59,3 +60,24 @@ class FakeS3Client:
         if Key not in self._objects:
             raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
         return {}
+
+
+# A day's partition only exists once that day has ended, so run "after" the
+# days under test instead of depending on today's date.
+AFTER_THE_DAYS_UNDER_TEST = datetime(2026, 12, 1, tzinfo=timezone.utc)
+
+
+def log_file(account: str, distribution: str, day: str, hour: str, suffix: str = "aaaa1111") -> str:
+    year, month, dom = day.split("-")
+    return (
+        f"AWSLogs/{account}/CloudFront/{distribution}/{year}/{month}/{dom}/{hour}/"
+        f"{distribution}.{day}-{hour}.{suffix}.gz"
+    )
+
+
+class FakeS3Resource:
+    def __init__(self, client: FakeS3Client):
+        self._client = client
+
+    def get_client(self) -> FakeS3Client:
+        return self._client
