@@ -25,7 +25,7 @@ PROJECT_PREFIX = "aws-data"
 
 # Destination: raw files are mirrored 1:1 (same key layout) under this
 # prefix on MinIO, so re-processing bronze never has to re-download from AWS.
-RAW_BUCKET = "lakehouse"
+RAW_BUCKET = "deltalake"
 RAW_PREFIX = f"{PROJECT_PREFIX}/raw/cloudtrail"
 
 # The first day this trail delivered logs. Earlier days have no Log Files, so
