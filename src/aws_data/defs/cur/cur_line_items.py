@@ -1,4 +1,5 @@
 import io
+from collections.abc import Iterator
 from datetime import date, datetime, timezone
 
 import dagster as dg
@@ -61,11 +62,13 @@ def clean_line_items(raw: pl.DataFrame, billing_period_start: date, ingested_at:
         "resource_tags are lists of key/value pairs."
     ),
     deps=[cur_files],
+    # A Billing Period AWS hasn't delivered yet is left alone, not materialized.
+    output_required=False,
     # Shared project pool (see PROJECT_PREFIX), which must be limited to 1:
     # see cloudfront_requests.
     pool=PROJECT_PREFIX,
 )
-def cur_line_items(context: dg.AssetExecutionContext, minio_s3: S3Resource) -> pl.DataFrame:
+def cur_line_items(context: dg.AssetExecutionContext, minio_s3: S3Resource) -> Iterator[dg.Output[pl.DataFrame]]:
     """One Billing Period of Line Items, read from the raw layer's MinIO
     mirror into the bronze Delta table on MinIO."""
     period = billing_period(context.partition_key)
@@ -74,7 +77,8 @@ def cur_line_items(context: dg.AssetExecutionContext, minio_s3: S3Resource) -> p
 
     keys = list_keys(client, STORAGE_BUCKET, prefix, ".parquet")
     if not keys:
-        raise dg.Failure(f"No Cost and Usage Report files in Raw for Billing Period {period}; leaving it as it was")
+        context.log.warning(f"No Cost and Usage Report files in Raw yet for Billing Period {period}; leaving it as it was")
+        return
 
     frames = []
     unreadable: dict[str, str] = {}
@@ -99,4 +103,4 @@ def cur_line_items(context: dg.AssetExecutionContext, minio_s3: S3Resource) -> p
 
     context.add_output_metadata({"files_read": len(frames), "line_items_read": line_items.height})
 
-    return clean_line_items(line_items, date.fromisoformat(context.partition_key), datetime.now(timezone.utc))
+    yield dg.Output(clean_line_items(line_items, date.fromisoformat(context.partition_key), datetime.now(timezone.utc)))

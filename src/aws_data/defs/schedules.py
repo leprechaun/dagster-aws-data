@@ -5,9 +5,12 @@ from aws_data.defs.cloudfront.cloudfront_requests import cloudfront_requests
 from aws_data.defs.cloudtrail.cloudtrail_activity import cloudtrail_activity
 from aws_data.defs.cloudtrail.cloudtrail_events import cloudtrail_events
 from aws_data.defs.cloudtrail.cloudtrail_raw_files import cloudtrail_files
+from aws_data.defs.cur.cur_line_items import cur_line_items
+from aws_data.defs.cur.cur_raw_files import cur_files
 from aws_data.lib.cloudfront_s3 import CLOUDFRONT_PARTITIONS_DEF
 from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
-from aws_data.lib.refresh import partitions_to_refresh
+from aws_data.lib.cur_s3 import CUR_PARTITIONS_DEF
+from aws_data.lib.refresh import billing_periods_to_refresh, partitions_to_refresh
 
 # Each hour, mirror whatever has arrived for the latest two days and rebuild
 # Bronze from it. Safe to repeat: Raw skips what it already has and Bronze
@@ -36,6 +39,10 @@ cloudfront_refresh = dg.define_asset_job(
     "cloudfront_refresh",
     selection=[cloudfront_files, cloudfront_requests],
 )
+cur_refresh = dg.define_asset_job(
+    "cur_refresh",
+    selection=[cur_files, cur_line_items],
+)
 
 
 @dg.schedule(job=cloudtrail_refresh, cron_schedule="20 * * * *", default_status=dg.DefaultScheduleStatus.RUNNING)
@@ -47,4 +54,14 @@ def cloudtrail_hourly(context: dg.ScheduleEvaluationContext):
 @dg.schedule(job=cloudfront_refresh, cron_schedule="40 * * * *", default_status=dg.DefaultScheduleStatus.RUNNING)
 def cloudfront_hourly(context: dg.ScheduleEvaluationContext):
     for partition_key in partitions_to_refresh(context.scheduled_execution_time, CLOUDFRONT_PARTITIONS_DEF):
+        yield dg.RunRequest(partition_key=partition_key, run_key=f"{partition_key}@{context.scheduled_execution_time.isoformat()}")
+
+
+# A Billing Period is replaced whole, and AWS restates it for a while after
+# it ends: so each hour, last month and this month. Older months only change
+# through a manual backfill. A month AWS hasn't delivered anything for yet is
+# left alone by Bronze, rather than failing every tick.
+@dg.schedule(job=cur_refresh, cron_schedule="0 * * * *", default_status=dg.DefaultScheduleStatus.RUNNING)
+def cur_hourly(context: dg.ScheduleEvaluationContext):
+    for partition_key in billing_periods_to_refresh(context.scheduled_execution_time, CUR_PARTITIONS_DEF):
         yield dg.RunRequest(partition_key=partition_key, run_key=f"{partition_key}@{context.scheduled_execution_time.isoformat()}")

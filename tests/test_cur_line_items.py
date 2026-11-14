@@ -149,14 +149,22 @@ def test_an_unreadable_file_fails_the_run_and_leaves_the_billing_period_as_it_wa
     assert bronze(tmp_path)["line_item_usage_account_id"].to_list() == ["kept"]
 
 
-def test_a_billing_period_with_nothing_in_raw_fails_the_run_and_leaves_the_billing_period_as_it_was(tmp_path):
+def test_a_billing_period_with_nothing_in_raw_yet_succeeds_without_writing_and_leaves_it_as_it_was(tmp_path):
     raw = FakeS3Client(objects={raw_file("2026-11"): parquet(line_item_usage_account_id=["kept"])})
     assert build(raw, tmp_path).success
 
     result = build(FakeS3Client(), tmp_path)
 
-    assert not result.success
+    assert result.success
+    assert result.asset_materializations_for_node("aws_data__bronze__cur_line_items") == []
     assert bronze(tmp_path)["line_item_usage_account_id"].to_list() == ["kept"]
+
+
+def test_a_billing_period_not_delivered_yet_creates_no_table(tmp_path):
+    result = build(FakeS3Client(), tmp_path)
+
+    assert result.success
+    assert not (tmp_path / "bronze" / "cur_line_items").exists()
 
 
 def test_clean_line_items_keeps_every_delivered_column_and_adds_the_billing_period_and_ingestion_time():
