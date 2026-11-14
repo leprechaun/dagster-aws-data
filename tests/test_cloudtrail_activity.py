@@ -6,15 +6,14 @@ from aws_data.lib.cloudtrail_activity import (
     ALL,
     CHANGE,
     GRAINS,
+    KEYS,
     NONE,
     READ_ONLY,
-    RECORD_COLUMNS,
     Grain,
     activity,
     activity_at_grain,
-    activity_for_day,
+    activity_from_bronze,
     prepare_records,
-    records_for_day,
 )
 
 FIFTEEN_MINUTES = Grain("15m", "15m", ("caller", "event_name"))
@@ -186,73 +185,36 @@ def test_every_grain_adds_up_to_the_same_totals():
     assert set(totals["error_count"].to_list()) == {1}
 
 
-def test_a_days_records_are_its_own_and_the_next_delivery_days_and_only_the_needed_columns():
-    delivered = [date(2026, 11, d) for d in (11, 12, 13, 14)]
-    frame = bronze(*({"event_time": at(12, 10)} for _ in delivered)).with_columns(
-        event_date=pl.Series(delivered), raw_json=pl.lit("{}")
-    )
-
-    kept = records_for_day(frame, date(2026, 11, 12)).collect()
-
-    assert kept.columns == list(RECORD_COLUMNS)
-    assert (
-        kept.height == 2
-    )  # delivered on the 12th and the 13th, not the 11th or the 14th
-
-
-def test_a_day_holds_only_the_records_that_happened_on_it():
-    # a Record delivered in the next day's folder still belongs to its own event day,
-    # so the frame handed in (two delivery days) has Records from three event days
-    records = bronze(
+def test_the_whole_of_bronze_is_counted_whatever_day_it_was_delivered():
+    frame = bronze(
         {"event_time": at(11, 23, 59)},
         {"event_time": at(12, 0, 0)},
-        {"event_time": at(12, 23, 59)},
         {"event_time": at(13, 0, 0)},
-    )
+    ).with_columns(event_date=pl.Series([date(2026, 11, 11), date(2026, 11, 12), date(2026, 11, 13)]))
 
-    rows = activity_for_day(records, date(2026, 11, 12)).collect()
+    rows = activity_from_bronze(frame).collect()
 
-    assert set(rows.filter(pl.col("grain") == "1d")["record_count"]) == {2}
-
-
-def test_a_days_buckets_all_start_within_that_day_in_every_grain():
-    rows = activity_for_day(
-        bronze(
-            {"event_time": at(12, 0, 0)},
-            {"event_time": at(12, 23, 59)},
-            {"event_time": at(13, 0, 0)},
-        ),
-        date(2026, 11, 12),
-    ).collect()
-
-    assert rows["bucket_start"].min() >= at(12, 0)
-    assert rows["bucket_start"].max() < at(13, 0)
-    assert rows["bucket_date"].unique().to_list() == [date(2026, 11, 12)]
+    assert rows.filter(pl.col("grain") == "1d")["record_count"].sum() == 3
+    assert rows["bucket_start"].n_unique() > 1
 
 
-def test_a_record_found_in_two_delivery_days_is_counted_once_for_its_day():
+def test_bronze_columns_it_does_not_aggregate_are_left_out():
+    frame = bronze({}).with_columns(raw_json=pl.lit("{}"), user_agent=pl.lit("aws-cli"))
+
+    rows = activity_from_bronze(frame).collect()
+
+    assert rows.columns == ["grain", "bucket_start", *KEYS, "record_count", "error_count"]
+
+
+def test_a_record_found_in_two_delivery_days_is_counted_once():
     twice = bronze(
         {"event_id": "same", "event_time": at(12, 23, 59)},
         {"event_id": "same", "event_time": at(12, 23, 59)},
     )
 
-    rows = activity_for_day(twice, date(2026, 11, 12)).collect()
+    rows = activity_from_bronze(twice).collect()
 
     assert set(rows["record_count"]) == {1}
-
-
-def test_a_day_with_no_records_is_an_empty_table_with_the_same_columns():
-    rows = activity_for_day(
-        bronze({"event_time": at(11, 5)}), date(2026, 11, 12)
-    ).collect()
-
-    assert rows.height == 0
-    assert (
-        rows.schema
-        == activity_for_day(bronze({"event_time": at(12, 5)}), date(2026, 11, 12))
-        .collect()
-        .schema
-    )
 
 
 def test_all_grains_share_one_schema_and_name_themselves():

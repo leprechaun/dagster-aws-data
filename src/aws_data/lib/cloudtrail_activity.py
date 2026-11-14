@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
 
 import polars as pl
 
@@ -103,28 +102,9 @@ def activity(records: pl.LazyFrame, grains: tuple[Grain, ...] = GRAINS) -> pl.La
     return pl.concat([activity_at_grain(records, grain) for grain in grains])
 
 
-def records_for_day(bronze: pl.LazyFrame, day: date) -> pl.LazyFrame:
-    """The bronze Records that can hold `day`'s activity: those delivered on `day`
-    and on the day after, and only the columns the activity table is built from
-    (so the scan prunes the partitions and never reads `raw_json`)."""
-    delivered_by_next_day = pl.col("event_date").is_between(
-        day, day + timedelta(days=1)
-    )
-    return bronze.filter(delivered_by_next_day).select(RECORD_COLUMNS)
-
-
-def activity_for_day(records: pl.LazyFrame, day: date) -> pl.LazyFrame:
-    """The activity table for the Records that happened on `day` (UTC), from
-    bronze `records` that include that whole day, and `bucket_date` (the day
-    each bucket starts on) as the partition column.
-
-    The day is cut on `event_time`, not Delivery Day: its last minutes can sit
-    in the next Delivery Day, so `records` should hold both. Every grain's
-    buckets nest inside a UTC day, so none is ever cut in two."""
-    start = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
-    happened_on_day = pl.col("event_time").is_between(
-        start, start + timedelta(days=1), closed="left"
-    )
-    return activity(prepare_records(records.filter(happened_on_day))).with_columns(
-        bucket_date=pl.col("bucket_start").dt.date()
-    )
+def activity_from_bronze(bronze: pl.LazyFrame) -> pl.LazyFrame:
+    """The whole activity table from every bronze Record, rebuilt in full.
+    Only the columns it is built from are read (never `raw_json`), and a Record
+    delivered twice is counted once, so there is no partial bucket to repair
+    and nothing to line up between Delivery Days."""
+    return activity(prepare_records(bronze.select(RECORD_COLUMNS)))

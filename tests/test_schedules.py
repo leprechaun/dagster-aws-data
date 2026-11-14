@@ -13,6 +13,8 @@ from aws_data.defs.resources import resources
 from aws_data.defs.schedules import (
     cloudfront_hourly,
     cloudfront_refresh,
+    cloudtrail_activity_hourly,
+    cloudtrail_activity_refresh,
     cloudtrail_hourly,
     cloudtrail_refresh,
 )
@@ -24,8 +26,8 @@ def definitions() -> dg.Definitions:
         resources(),
         dg.Definitions(
             assets=[cloudtrail_files, cloudtrail_events, cloudtrail_activity, cloudfront_files, cloudfront_requests],
-            jobs=[cloudtrail_refresh, cloudfront_refresh],
-            schedules=[cloudtrail_hourly, cloudfront_hourly],
+            jobs=[cloudtrail_refresh, cloudtrail_activity_refresh, cloudfront_refresh],
+            schedules=[cloudtrail_hourly, cloudtrail_activity_hourly, cloudfront_hourly],
         ),
     )
 
@@ -72,15 +74,31 @@ def selected_asset_keys(job_name: str) -> set[dg.AssetKey]:
     return set(definitions().resolve_job_def(job_name).asset_layer.executable_asset_keys)
 
 
-def test_each_schedule_runs_a_job_that_refreshes_every_layer_of_its_own_source():
+def test_each_schedule_runs_a_job_that_refreshes_raw_and_bronze_of_its_own_source():
     assert cloudtrail_hourly.job_name == cloudtrail_refresh.name
     assert cloudfront_hourly.job_name == cloudfront_refresh.name
     assert selected_asset_keys(cloudtrail_refresh.name) == {
         cloudtrail_files.key,
         cloudtrail_events.key,
-        cloudtrail_activity.key,
     }
     assert selected_asset_keys(cloudfront_refresh.name) == {
         cloudfront_files.key,
         cloudfront_requests.key,
     }
+
+
+def test_the_activity_table_is_rebuilt_hourly_by_its_own_job_after_bronze_has_had_time_to_refresh():
+    assert cloudtrail_activity_hourly.job_name == cloudtrail_activity_refresh.name
+    assert selected_asset_keys(cloudtrail_activity_refresh.name) == {cloudtrail_activity.key}
+    assert cloudtrail_activity_hourly.default_status == dg.DefaultScheduleStatus.RUNNING
+    assert cloudtrail_activity_hourly.cron_schedule == "50 * * * *"
+
+
+def test_each_activity_tick_runs_the_whole_table_once_and_is_not_deduplicated():
+    ticks = [
+        run_requests_at(cloudtrail_activity_hourly, datetime(2026, 11, 14, hour, 50, tzinfo=timezone.utc))
+        for hour in (10, 11)
+    ]
+
+    assert [len(requests) for requests in ticks] == [1, 1]
+    assert all(request.partition_key is None for requests in ticks for request in requests)

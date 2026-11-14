@@ -10,17 +10,27 @@ from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
 from aws_data.lib.refresh import partitions_to_refresh
 
 # Each hour, mirror whatever has arrived for the latest two days and rebuild
-# Bronze from it, then the CloudTrail activity table from Bronze. Safe to
-# repeat: Raw skips what it already has and each layer replaces the day's
-# partition. A day's activity includes its last minutes, which are delivered
-# with the next day's Log Files, so yesterday is rebuilt each hour of today. The run_key is unique per tick: a key that
+# Bronze from it. Safe to repeat: Raw skips what it already has and Bronze
+# replaces the day's partition. The run_key is unique per tick: a key that
 # repeated across ticks would make Dagster skip every rerun after the first,
 # while one per tick still stops the same tick launching a day twice. The
 # sources are staggered so their runs don't start together, and they share
 # the project pool in any case.
 cloudtrail_refresh = dg.define_asset_job(
     "cloudtrail_refresh",
-    selection=[cloudtrail_files, cloudtrail_events, cloudtrail_activity],
+    selection=[cloudtrail_files, cloudtrail_events],
+)
+# The activity table isn't partitioned, so it can't share a job with the
+# partitioned Bronze: it gets its own, which rebuilds the whole table once an
+# hour, after the CloudTrail refresh at :20 has had time to finish.
+cloudtrail_activity_refresh = dg.define_asset_job(
+    "cloudtrail_activity_refresh",
+    selection=[cloudtrail_activity],
+)
+cloudtrail_activity_hourly = dg.ScheduleDefinition(
+    job=cloudtrail_activity_refresh,
+    cron_schedule="50 * * * *",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
 )
 cloudfront_refresh = dg.define_asset_job(
     "cloudfront_refresh",
