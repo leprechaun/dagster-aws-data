@@ -5,7 +5,7 @@ version = "0.1.0"
 dependencies = [
     "dagster==1.13.20",
     "dagster-aws",
-    "dagster-deltalake-polars>=0.29.20",
+    "dagster-delta[polars]>=0.5.9",
     "dagster-k8s>=0.29.20",
     "dagster-postgres>=0.29.20",
     "pytest-cov>=7.1.0",

@@ -1,6 +1,8 @@
+import os
+
 import pytest
 
-from aws_data.defs.resources import aws_source_s3
+from aws_data.defs.resources import aws_source_s3, resources
 
 MINIO_ENV = {
     "AWS_ACCESS_KEY_ID": "minio-key",
@@ -29,3 +31,23 @@ def test_source_client_uses_bucket_region():
     client = aws_source_s3("k", "s").get_client()
     assert client.meta.region_name == "us-east-1"
 
+
+
+UNSAFE_RENAME = "AWS_S3_ALLOW_UNSAFE_RENAME"
+
+
+def test_delta_commits_to_minio_are_allowed_unsafe_rename_by_default(monkeypatch):
+    monkeypatch.setenv(UNSAFE_RENAME, "unset")  # so the test's own changes are undone afterwards
+    monkeypatch.delenv(UNSAFE_RENAME)
+
+    resources()
+
+    assert os.environ[UNSAFE_RENAME] == "true"
+
+
+def test_an_explicit_unsafe_rename_setting_is_not_overridden(monkeypatch):
+    monkeypatch.setenv(UNSAFE_RENAME, "false")
+
+    resources()
+
+    assert os.environ[UNSAFE_RENAME] == "false"

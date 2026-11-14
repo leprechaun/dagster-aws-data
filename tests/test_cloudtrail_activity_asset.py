@@ -3,13 +3,12 @@ from datetime import date, datetime, timezone
 import dagster as dg
 import polars as pl
 from dagster._core.test_utils import freeze_time
-from dagster_deltalake import LocalConfig
-from dagster_deltalake_polars import DeltaLakePolarsIOManager
+from dagster_delta import DeltaLakePolarsIOManager, LocalConfig
 from deltalake import DeltaTable
 
 from aws_data.defs.cloudtrail.cloudtrail_activity import cloudtrail_activity
 from aws_data.defs.cloudtrail.cloudtrail_events import cloudtrail_events
-from aws_data.defs.resources import DeltaTables
+from aws_data.lib.cloudtrail_activity import RECORD_COLUMNS
 from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
 
 EVENTS_KEY = dg.AssetKey(["aws-data", "bronze", "cloudtrail_events"])
@@ -29,8 +28,13 @@ def test_it_is_built_from_bronze_and_is_not_partitioned():
     assert "partition_expr" not in cloudtrail_activity.metadata_by_key[ACTIVITY_KEY]
 
 
-def test_it_reads_bronze_through_the_delta_tables_resource():
-    assert "delta_tables" in cloudtrail_activity.required_resource_keys
+def test_it_reads_all_of_bronze_lazily_and_only_the_columns_it_aggregates():
+    bronze_input = cloudtrail_activity.node_def.input_def_named("bronze")
+
+    assert bronze_input.dagster_type.typing_type is pl.LazyFrame
+    assert bronze_input.metadata["columns"] == list(RECORD_COLUMNS)
+    assert "raw_json" not in RECORD_COLUMNS
+    assert cloudtrail_activity.partitions_def is None  # so it is given every partition of bronze
 
 
 def delta_io_manager(root: str) -> DeltaLakePolarsIOManager:
@@ -63,7 +67,8 @@ def bronze_day(delivery_day: str, *event_times: datetime) -> dg.AssetsDefinition
                 }
                 for i, event_time in enumerate(event_times)
             ],
-            schema_overrides={"event_time": pl.Datetime("us", "UTC")},
+            # bronze's schema types every column, even one with no value in a given day
+            schema_overrides={"event_time": pl.Datetime("us", "UTC"), "error_code": pl.Utf8},
         )
 
     return cloudtrail_events
@@ -80,7 +85,7 @@ def test_every_delivery_day_is_counted_in_one_unpartitioned_table_that_is_rebuil
                 assets,
                 partition_key=partition_key,
                 selection=selection,
-                resources={"io_manager": io_manager, "delta_tables": DeltaTables(root_uri=root)},
+                resources={"io_manager": io_manager},
             )
         assert result.success
 
@@ -89,7 +94,7 @@ def test_every_delivery_day_is_counted_in_one_unpartitioned_table_that_is_rebuil
     bronze_13th = bronze_day("2026-11-13", when(12, 23, 59), when(13, 0, 1))
     materialize([bronze_13th], "2026-11-13")
 
-    # bronze is read from Delta by the asset, so it is only defined here (for lineage), not rerun;
+    # bronze is read back from Delta, so it is only defined here, not rerun;
     # building twice must replace the table, not add to it
     for _ in range(2):
         materialize([bronze_13th, cloudtrail_activity], selection=[cloudtrail_activity])
