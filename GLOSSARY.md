@@ -39,6 +39,26 @@ The layer holding tables built from Bronze for analysis, rather than one row per
 Records counted per time bucket, by caller, API, access (read-only or a change), account, region and error, at several grains (15 minutes, an hour, a day) in one Gold table told apart by a `grain` column. Counts add up within a grain, never across grains. A key a grain leaves out reads `(all)`; a key missing in the source reads `(none)`.
 _Avoid_: Aggregate, rollup
 
+## Cost and Usage Report
+
+**Cost and Usage Report** (CUR):
+The AWS billing export (CUR 2.0, delivered as Parquet through Data Exports) listing every charge in an Organization, covering all its Accounts from the payer. It is a different kind of source from a Log File: AWS rewrites a Billing Period's files as charges are restated, rather than delivering each file once.
+_Avoid_: Bill, invoice, cost log
+
+**Billing Period**:
+The calendar month (UTC) a CUR covers, written `yyyy-mm` as in AWS's `BILLING_PERIOD` folder. It is the partition unit for every CUR layer. A Billing Period stays open to restatement after it ends, so it can change after the month is over.
+_Avoid_: Delivery Day, Request Day, month
+
+**Line Item**:
+One row of a CUR: a single charge, usage amount, credit, tax or fee, with its cost and usage attributes. A Line Item keeps this name in every layer, including as a row in Bronze.
+_Avoid_: Record (CloudTrail's term), Request (CloudFront's term), charge, row
+
+**Payer Account**:
+The Account that is billed for the whole Organization (`bill_payer_account_id`). It owns the CUR.
+
+**Usage Account**:
+The Account whose usage a Line Item records (`line_item_usage_account_id`). It is the CUR's counterpart of the log layers' Account.
+
 ## AWS hierarchy
 
 **Organization**:

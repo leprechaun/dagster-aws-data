@@ -1,3 +1,4 @@
+import hashlib
 import io
 from datetime import datetime, timezone
 
@@ -5,9 +6,18 @@ from botocore.exceptions import ClientError
 
 
 class FakePaginator:
-    def __init__(self, keys: list[str], page_size: int):
+    def __init__(self, keys: list[str], page_size: int, objects: dict[str, bytes] | None = None):
         self._keys = keys
         self._page_size = page_size
+        self._objects = objects or {}
+
+    def _listing(self, key: str) -> dict:
+        """What S3 lists for an object: its key, plus size and the quoted MD5
+        that is a single-put object's ETag (when the body is known)."""
+        if key not in self._objects:
+            return {"Key": key}
+        body = self._objects[key]
+        return {"Key": key, "Size": len(body), "ETag": f'"{hashlib.md5(body).hexdigest()}"'}
 
     def paginate(self, Bucket: str, Prefix: str = "", Delimiter: str | None = None):
         matching = sorted(k for k in self._keys if k.startswith(Prefix))
@@ -21,7 +31,7 @@ class FakePaginator:
                         common_prefixes.append(common)
             items = [("CommonPrefixes", {"Prefix": p}) for p in common_prefixes]
         else:
-            items = [("Contents", {"Key": k}) for k in matching]
+            items = [("Contents", self._listing(k)) for k in matching]
 
         for start in range(0, len(items), self._page_size) or [0]:
             page: dict = {}
@@ -48,13 +58,16 @@ class FakeS3Client:
 
     def get_paginator(self, operation: str) -> FakePaginator:
         assert operation == "list_objects_v2"
-        return FakePaginator(self._all_keys(), self._page_size)
+        return FakePaginator(self._all_keys(), self._page_size, self._objects)
 
     def get_object(self, Bucket: str, Key: str) -> dict:
         return {"Body": io.BytesIO(self._objects[Key])}
 
     def put_object(self, Bucket: str, Key: str, Body: bytes) -> None:
         self._objects[Key] = Body
+
+    def delete_object(self, Bucket: str, Key: str) -> None:
+        self._objects.pop(Key, None)
 
     def head_object(self, Bucket: str, Key: str) -> dict:
         if Key not in self._objects:
