@@ -7,6 +7,7 @@ import polars as pl
 from dagster_aws.s3 import S3Resource
 
 from aws_data.defs.cloudtrail.cloudtrail_raw_files import cloudtrail_files
+from aws_data.defs.resources import column
 from aws_data.lib.cloudtrail_s3 import (
     CLOUDTRAIL_PARTITIONS_DEF,
     PROJECT_PREFIX,
@@ -59,17 +60,125 @@ CLOUDTRAIL_SCHEMA = {
 }
 
 
+CLOUDTRAIL_COLUMNS = dg.TableSchema(
+    columns=[
+        column(
+            "event_date",
+            "Delivery Day: the UTC day CloudTrail wrote the Log File, and the partition key. "
+            "Not the day of the activity: a Record from the last minutes of a day can sit in "
+            "the next day's Log File, so use event_time for when something happened.",
+        ),
+        column(
+            "event_id",
+            "CloudTrail's unique id for the Record. A Log File delivered twice repeats it.",
+        ),
+        column(
+            "event_time",
+            "When the activity happened (UTC), to the second. Null if CloudTrail's timestamp didn't parse.",
+        ),
+        column("event_version", "CloudTrail's record format version."),
+        column("event_source", "The AWS service called, e.g. `s3.amazonaws.com`."),
+        column("event_name", "The API action called, e.g. `GetObject`."),
+        column("event_type", "Kind of event, e.g. `AwsApiCall` or `AwsConsoleSignIn`."),
+        column(
+            "event_category",
+            "`Management` or `Data`. Only management events are delivered here today.",
+        ),
+        column(
+            "aws_region",
+            "The region the call was made to. Global services report `us-east-1`.",
+        ),
+        column(
+            "source_ip_address",
+            "Caller's IP, or for calls made by another AWS service, that service's name (e.g. `s3.amazonaws.com`).",
+        ),
+        column(
+            "user_agent",
+            "Caller's client string. Not always present, and caller-controlled, so not to be trusted.",
+        ),
+        column(
+            "request_id",
+            "The service's id for the request, for correlating with its own logs.",
+        ),
+        column(
+            "recipient_account_id",
+            "The Account the activity happened in. Differs from user_identity_account_id for cross-account calls.",
+        ),
+        column(
+            "management_event", "Whether this is a management (control plane) event."
+        ),
+        column(
+            "read_only",
+            "True for a read-only call, false for one that changes something. Null when CloudTrail didn't say.",
+        ),
+        column(
+            "error_code",
+            "The AWS error code if the call failed. Null means success, not unknown.",
+        ),
+        column(
+            "error_message",
+            "The error's message if the call failed. Free text, and can embed account ids, ARNs or user names.",
+        ),
+        column(
+            "user_identity_type",
+            "Kind of identity, e.g. `IAMUser`, `AssumedRole`, `Root`, `AWSService`.",
+        ),
+        column("user_identity_principal_id", "The caller's unique principal id."),
+        column(
+            "user_identity_arn",
+            "The caller's ARN. For assumed roles it is the session ARN, so it varies by session name. Null for some callers (e.g. AWS services).",
+        ),
+        column(
+            "user_identity_account_id",
+            "The Caller Account: the account owning the calling identity.",
+        ),
+        column(
+            "user_identity_access_key_id",
+            "The access key used. Null for console sessions and service-to-service calls.",
+        ),
+        column("user_identity_user_name", "IAM user name. Only set for IAM users."),
+        column(
+            "user_identity_invoked_by",
+            "The AWS service that made the call on the caller's behalf, if any.",
+        ),
+        column(
+            "organization_id",
+            "The Organization (`o-...`) whose Log File folder held the Record, taken from the key, not the Record.",
+        ),
+        column(
+            "source_key",
+            "Raw key of the Log File the Record came from, for tracing back to the original.",
+        ),
+        column(
+            "ingested_at",
+            "When this row was parsed into Bronze (UTC). One value per Log File, so it differs between re-runs.",
+        ),
+        column(
+            "raw_json",
+            "The whole original Record as JSON text, for fields not promoted to columns "
+            "(requestParameters, responseElements, resources...). Their shape varies per service and over time.",
+        ),
+    ]
+)
+
+
 def _parse_event_time(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        )
     except ValueError:
         return None
 
 
 def _row_from_record(
-    record: dict, event_date: date, organization_id: str, source_key: str, ingested_at: datetime
+    record: dict,
+    event_date: date,
+    organization_id: str,
+    source_key: str,
+    ingested_at: datetime,
 ) -> dict:
     user_identity = record.get("userIdentity") or {}
     return {
@@ -109,14 +218,24 @@ def _row_from_record(
     partitions_def=CLOUDTRAIL_PARTITIONS_DEF,
     group_name="cloudtrail",
     kinds={"s3", "deltalake"},
-    metadata={"partition_expr": "event_date"},
+    metadata={
+        "partition_expr": "event_date",
+        "dagster/column_schema": CLOUDTRAIL_COLUMNS,
+    },
+    description=(
+        "Bronze: every CloudTrail Record delivered, one row per Record, parsed from the Raw "
+        "mirror and partitioned by Delivery Day. Management events across the Organization's "
+        "accounts and regions. Not deduplicated: a Log File delivered twice repeats its rows."
+    ),
     deps=[cloudtrail_files],
     # Shared project pool (see PROJECT_PREFIX), which must be limited to 1:
     # MinIO needs allow_unsafe_rename, so concurrent commits to the same Delta
     # table can race. The limit lives in instance config, not in this repo.
     pool=PROJECT_PREFIX,
 )
-def cloudtrail_events(context: dg.AssetExecutionContext, minio_s3: S3Resource) -> pl.DataFrame:
+def cloudtrail_events(
+    context: dg.AssetExecutionContext, minio_s3: S3Resource
+) -> pl.DataFrame:
     """One day of raw CloudTrail management-event records, parsed from the
     raw layer's MinIO mirror into the bronze Delta table on MinIO."""
     partition_date = date.fromisoformat(context.partition_key)
@@ -131,28 +250,45 @@ def cloudtrail_events(context: dg.AssetExecutionContext, minio_s3: S3Resource) -
     regions_seen: set[str] = set()
 
     for organization_id in organizations:
-        account_ids = list_accounts(client, STORAGE_BUCKET, RAW_ROOT_PREFIX, organization_id)
+        account_ids = list_accounts(
+            client, STORAGE_BUCKET, RAW_ROOT_PREFIX, organization_id
+        )
         accounts_seen.update(account_ids)
 
         for account_id in account_ids:
-            regions = list_regions(client, STORAGE_BUCKET, RAW_ROOT_PREFIX, organization_id, account_id)
+            regions = list_regions(
+                client, STORAGE_BUCKET, RAW_ROOT_PREFIX, organization_id, account_id
+            )
             regions_seen.update(regions)
 
             for region in regions:
                 for key in list_day_object_keys(
-                    client, STORAGE_BUCKET, RAW_ROOT_PREFIX, organization_id, account_id, region, partition_date
+                    client,
+                    STORAGE_BUCKET,
+                    RAW_ROOT_PREFIX,
+                    organization_id,
+                    account_id,
+                    region,
+                    partition_date,
                 ):
                     try:
-                        body = client.get_object(Bucket=STORAGE_BUCKET, Key=key)["Body"].read()
+                        body = client.get_object(Bucket=STORAGE_BUCKET, Key=key)[
+                            "Body"
+                        ].read()
                         records = json.loads(gzip.decompress(body)).get("Records", [])
                     except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
-                        context.log.warning(f"Skipping unreadable CloudTrail file {key}: {e}")
+                        context.log.warning(
+                            f"Skipping unreadable CloudTrail file {key}: {e}"
+                        )
                         files_skipped += 1
                         continue
 
                     ingested_at = datetime.now(timezone.utc)
                     rows.extend(
-                        _row_from_record(r, partition_date, organization_id, key, ingested_at) for r in records
+                        _row_from_record(
+                            r, partition_date, organization_id, key, ingested_at
+                        )
+                        for r in records
                     )
                     files_read += 1
 
