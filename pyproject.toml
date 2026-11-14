@@ -32,6 +32,10 @@ testpaths = ["tests"]
 
 [tool.ruff]
 src = ["src"]
+# Experiment notebooks (marimo) aren't linted or reformatted, even when an
+# editor passes the file explicitly.
+extend-exclude = ["*.nb.py"]
+force-exclude = true
 
 [tool.ruff.lint.isort]
 known-first-party = ["aws_data"]
