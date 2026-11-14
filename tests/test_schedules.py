@@ -6,6 +6,7 @@ from dagster._core.test_utils import freeze_time
 
 from aws_data.defs.cloudfront.cloudfront_raw_files import cloudfront_files
 from aws_data.defs.cloudfront.cloudfront_requests import cloudfront_requests
+from aws_data.defs.cloudtrail.cloudtrail_activity import cloudtrail_activity
 from aws_data.defs.cloudtrail.cloudtrail_events import cloudtrail_events
 from aws_data.defs.cloudtrail.cloudtrail_raw_files import cloudtrail_files
 from aws_data.defs.resources import resources
@@ -22,7 +23,7 @@ def definitions() -> dg.Definitions:
     return dg.Definitions.merge(
         resources(),
         dg.Definitions(
-            assets=[cloudtrail_files, cloudtrail_events, cloudfront_files, cloudfront_requests],
+            assets=[cloudtrail_files, cloudtrail_events, cloudtrail_activity, cloudfront_files, cloudfront_requests],
             jobs=[cloudtrail_refresh, cloudfront_refresh],
             schedules=[cloudtrail_hourly, cloudfront_hourly],
         ),
@@ -71,12 +72,13 @@ def selected_asset_keys(job_name: str) -> set[dg.AssetKey]:
     return set(definitions().resolve_job_def(job_name).asset_layer.executable_asset_keys)
 
 
-def test_each_schedule_runs_a_job_that_refreshes_raw_and_bronze_of_its_own_source():
+def test_each_schedule_runs_a_job_that_refreshes_every_layer_of_its_own_source():
     assert cloudtrail_hourly.job_name == cloudtrail_refresh.name
     assert cloudfront_hourly.job_name == cloudfront_refresh.name
     assert selected_asset_keys(cloudtrail_refresh.name) == {
         cloudtrail_files.key,
         cloudtrail_events.key,
+        cloudtrail_activity.key,
     }
     assert selected_asset_keys(cloudfront_refresh.name) == {
         cloudfront_files.key,

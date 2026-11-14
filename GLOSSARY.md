@@ -30,7 +30,18 @@ The layer holding every Log File as an unchanged copy on MinIO, mirrored from th
 _Avoid_: Landing
 
 **Bronze**:
-The layer holding every Record or Request delivered, parsed into typed rows of a Delta Lake table. Built only from Raw, never from AWS directly. Silver and gold layers may follow but don't exist yet.
+The layer holding every Record or Request delivered, parsed into typed rows of a Delta Lake table. Built only from Raw, never from AWS directly. A silver layer may follow but doesn't exist yet.
+
+**Gold**:
+The layer holding tables built from Bronze for analysis, rather than one row per Record or Request. Today it holds the CloudTrail Activity table.
+
+**Event Day**:
+The UTC day a Record's own event time falls on, as opposed to its Delivery Day. Gold's CloudTrail tables are partitioned by it. A Record can be delivered on the day after its Event Day, so an Event Day is built from two Delivery Days.
+_Avoid_: Event date (Bronze's `event_date` column is the Delivery Day)
+
+**Activity**:
+Records counted per time bucket, by caller, API, access (read-only or a change), account, region and error, at several grains (15 minutes, an hour, a day) in one Gold table told apart by a `grain` column. Counts add up within a grain, never across grains. A key a grain leaves out reads `(all)`; a key missing in the source reads `(none)`.
+_Avoid_: Aggregate, rollup
 
 ## AWS hierarchy
 

@@ -1,4 +1,5 @@
 import dagster as dg
+import polars as pl
 from dagster_aws.s3 import S3Resource
 from dagster_deltalake import S3Config
 from dagster_deltalake_polars import DeltaLakePolarsIOManager
@@ -35,6 +36,30 @@ class RawFilesIOManager(dg.ConfigurableIOManager):
             f"Asset '{context.asset_key}' is not loadable through an IO manager; "
             "downstream assets should read its output directly instead of taking it as an input."
         )
+
+
+class DeltaTables(dg.ConfigurableResource):
+    """Reads the project's Delta tables lazily, for assets that need more than
+    the IO manager's one-partition input: for a time-window input it filters on
+    the window's first day only. The S3 settings are left out for a local root."""
+
+    root_uri: str
+    access_key_id: str | None = None
+    secret_access_key: str | None = None
+    endpoint: str | None = None
+
+    def storage_options(self) -> dict[str, str]:
+        given = {
+            "aws_access_key_id": self.access_key_id,
+            "aws_secret_access_key": self.secret_access_key,
+            "aws_endpoint_url": self.endpoint,
+        }
+        options = {name: value for name, value in given.items() if value is not None}
+        return {**options, "aws_region": "us-east-1"} if options else {}
+
+    def scan(self, layer: str, table: str) -> pl.LazyFrame:
+        """The table at <root>/<layer>/<table>, where the IO manager puts it."""
+        return pl.scan_delta(f"{self.root_uri}/{layer}/{table}", storage_options=self.storage_options() or None)
 
 
 @dg.definitions
@@ -82,6 +107,12 @@ def resources() -> dg.Definitions:
             "aws_s3": aws_s3,
             "minio_s3": minio_s3,
             "io_manager": deltalake_io_manager,
+            "delta_tables": DeltaTables(
+                root_uri=f"s3://{STORAGE_BUCKET}/{PROJECT_PREFIX}",
+                access_key_id=dg.EnvVar("AWS_ACCESS_KEY_ID"),
+                secret_access_key=dg.EnvVar("AWS_SECRET_ACCESS_KEY"),
+                endpoint=dg.EnvVar("AWS_ENDPOINT_URL_S3"),
+            ),
             "raw_files_io_manager": RawFilesIOManager(),
         }
     )
