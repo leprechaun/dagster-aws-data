@@ -2,13 +2,22 @@ import os
 
 import dagster as dg
 from dagster_aws.s3 import S3Resource
-from dagster_delta import DeltaLakePolarsIOManager, S3Config
+from dagster_delta import S3Config
+from dagster_delta.io_manager.arrow import _DeltaLakePyArrowTypeHandler
+from dagster_delta.io_manager.base import TableConnection
+from dagster_delta.io_manager.polars import (
+    DeltaLakePolarsIOManager,
+    _DeltaLakePolarsTypeHandler,
+)
+from deltalake import DeltaTable
 
 from aws_data.lib.cloudtrail_s3 import PROJECT_PREFIX, SOURCE_REGION, STORAGE_BUCKET
 
 
 def aws_source_s3(
-    access_key_id: str | dg.EnvVar, secret_access_key: str | dg.EnvVar, region: str = SOURCE_REGION
+    access_key_id: str | dg.EnvVar,
+    secret_access_key: str | dg.EnvVar,
+    region: str = SOURCE_REGION,
 ) -> S3Resource:
     """S3 client for the real AWS source bucket. Everything is passed
     explicitly, including the endpoint, so the ambient AWS_* variables (which
@@ -36,6 +45,95 @@ class RawFilesIOManager(dg.ConfigurableIOManager):
             f"Asset '{context.asset_key}' is not loadable through an IO manager; "
             "downstream assets should read its output directly instead of taking it as an input."
         )
+
+
+def sync_table_description(dt: DeltaTable, description: str | None) -> bool:
+    """Set the table's Delta-level description, returning whether it changed.
+
+    Each alter is its own commit in the Delta log, so only write when the
+    description actually differs.
+    """
+    if not description or dt.metadata().description == description:
+        return False
+    dt.alter.set_table_description(description)
+    return True
+
+
+def column(name: str, description: str | None = None, **tags: str) -> dg.TableColumn:
+    """A `dagster/column_schema` entry carrying only a description and tags
+    (e.g. `unit="bpm"`). The type is left blank on purpose: Delta Lake already
+    records it, and TableColumn's "string" default would be wrong for most columns.
+    """
+    return dg.TableColumn(name, type="", description=description, tags=tags or None)
+
+
+def column_metadata_updates(
+    schema: dg.TableSchema | None, current: dict[str, dict[str, str]]
+) -> dict[str, dict[str, str]]:
+    """Map each column whose declared metadata isn't already on its Delta field
+    to the metadata to set.
+
+    A column's description is stored under `comment` (the Spark/Unity Catalog
+    convention), alongside its tags verbatim. Keys are only ever added or
+    overwritten, never removed. Raises if the schema declares a column the
+    table doesn't have, since that means the declaration has drifted.
+    """
+    if schema is None:
+        return {}
+    updates = {}
+    for col in schema.columns:
+        if col.name not in current:
+            raise ValueError(
+                f"column_schema declares {col.name!r}, which the table doesn't have"
+            )
+        desired = dict(col.tags or {})
+        if col.description:
+            desired["comment"] = col.description
+        existing = current[col.name]
+        if any(existing.get(k) != v for k, v in desired.items()):
+            updates[col.name] = desired
+    return updates
+
+
+def sync_column_metadata(dt: DeltaTable, schema: dg.TableSchema | None) -> list[str]:
+    """Copy declared column descriptions/tags onto the table's fields,
+    returning the columns that changed. One commit per changed column.
+    """
+    current = {f.name: dict(f.metadata) for f in dt.schema().fields}
+    updates = column_metadata_updates(schema, current)
+    for col, metadata in updates.items():
+        dt.alter.set_column_metadata(col, metadata)
+    return list(updates)
+
+
+class DescribedDeltaLakePolarsTypeHandler(_DeltaLakePolarsTypeHandler):
+    def handle_output(
+        self, context: dg.OutputContext, table_slice, obj, connection: TableConnection
+    ):
+        super().handle_output(context, table_slice, obj, connection)
+        dt = DeltaTable(
+            connection.table_uri, storage_options=connection.storage_options
+        )
+        if sync_table_description(dt, context.asset_spec.description):
+            context.log.info(
+                f"Updated Delta table description on {connection.table_uri}"
+            )
+        schema = (context.definition_metadata or {}).get("dagster/column_schema")
+        if changed := sync_column_metadata(dt, schema):
+            context.log.info(
+                f"Updated Delta column metadata on {connection.table_uri}: {changed}"
+            )
+
+
+class DescribedDeltaLakePolarsIOManager(DeltaLakePolarsIOManager):
+    """DeltaLakePolarsIOManager that also copies each asset's description, and
+    its `dagster/column_schema` column descriptions/tags, onto its Delta table,
+    so readers outside Dagster (e.g. the marimo notebooks) see them.
+    """
+
+    @staticmethod
+    def type_handlers():
+        return [DescribedDeltaLakePolarsTypeHandler(), _DeltaLakePyArrowTypeHandler()]
 
 
 @dg.definitions
@@ -71,7 +169,7 @@ def resources() -> dg.Definitions:
     # name - so key_prefix maps 1:1 to the medallion layer (bronze/silver/gold).
     # Only those last two asset-key parts place a table, so the project
     # namespace lives in the root: s3://<bucket>/<project>, beside the Raw files.
-    deltalake_io_manager = DeltaLakePolarsIOManager(
+    deltalake_io_manager = DescribedDeltaLakePolarsIOManager(
         root_uri=f"s3://{STORAGE_BUCKET}/{PROJECT_PREFIX}",
         storage_options=S3Config(
             access_key_id=dg.EnvVar("AWS_ACCESS_KEY_ID"),
