@@ -8,13 +8,14 @@ dependencies = [
     "dagster-delta[polars]>=0.5.9",
     "dagster-k8s>=0.29.20",
     "dagster-postgres>=0.29.20",
-    "pytest-cov>=7.1.0",
 ]
 
 [dependency-groups]
 dev = [
+    "pytest-cov>=7.1.0",
     "dagster-dg-cli",
     "dagster-webserver",
+    "pyarrow>=25.0.1",
     "pytest>=9.1.1",
     "ruff>=0.16.5",
 ]
