@@ -163,6 +163,14 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "label_name": ("label.name", pl.Utf8),
         "label_color": ("label.color", pl.Utf8),
     },
+    "release": {
+        "release_id": ("release.id", pl.Int64),
+        "release_tag_name": ("release.tag_name", pl.Utf8),
+        "release_name": ("release.name", pl.Utf8),
+        "release_draft": ("release.draft", pl.Boolean),
+        "release_prerelease": ("release.prerelease", pl.Boolean),
+        "release_published_at": ("release.published_at", pl.Datetime("us", "UTC")),
+    },
 }
 
 
