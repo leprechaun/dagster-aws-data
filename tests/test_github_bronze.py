@@ -43,7 +43,7 @@ def test_check_run_schema_is_the_common_columns_then_its_typed_columns_then_payl
 
 
 def test_a_type_without_a_spec_keeps_the_common_schema_with_payload_last():
-    assert list(bronze_schema("push").items()) == [
+    assert list(bronze_schema("an_unlisted_event_type").items()) == [
         *COMMON_COLUMNS,
         ("payload", pl.Utf8),
     ]

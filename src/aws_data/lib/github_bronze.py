@@ -32,6 +32,12 @@ COMMON_SCHEMA = {
     "sender_name": pl.Utf8,
 }
 
+
+def _push_commit_count(payload: dict) -> int:
+    """How many commits a push carried; 0 when the list is missing or null."""
+    return len(payload.get("commits") or [])
+
+
 # Per event type: column name -> (source, Polars dtype). The source is a dotted
 # path into the payload, or a function of the payload for a derived value.
 # A type without an entry keeps only the common columns.
@@ -94,6 +100,18 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
             pl.Datetime("us", "UTC"),
         ),
         "workflow_job_runner_name": ("workflow_job.runner_name", pl.Utf8),
+    },
+    "push": {
+        "push_ref": ("ref", pl.Utf8),
+        "push_before": ("before", pl.Utf8),
+        "push_after": ("after", pl.Utf8),
+        "push_forced": ("forced", pl.Boolean),
+        "push_created": ("created", pl.Boolean),
+        "push_deleted": ("deleted", pl.Boolean),
+        "push_pusher_name": ("pusher.name", pl.Utf8),
+        "push_commit_count": (_push_commit_count, pl.Int64),
+        "push_head_commit_id": ("head_commit.id", pl.Utf8),
+        "push_head_commit_message": ("head_commit.message", pl.Utf8),
     },
 }
 
