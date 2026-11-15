@@ -4,6 +4,8 @@ import dagster as dg
 import pytest
 from dagster._core.test_utils import freeze_time
 
+from aws_data.defs.claude.claude_bronze_assets import SESSION_STATUS_BRONZE
+from aws_data.defs.claude.claude_raw_files import SESSION_STATUS_FILES
 from aws_data.defs.cloudfront.cloudfront_raw_files import cloudfront_files
 from aws_data.defs.cloudfront.cloudfront_requests import cloudfront_requests
 from aws_data.defs.cloudtrail.cloudtrail_activity import cloudtrail_activity
@@ -15,6 +17,8 @@ from aws_data.defs.github.github_bronze_assets import GITHUB_BRONZE_ASSETS
 from aws_data.defs.github.github_raw_files import GITHUB_RAW_ASSETS
 from aws_data.defs.resources import resources
 from aws_data.defs.schedules import (
+    claude_hourly,
+    claude_refresh,
     cloudfront_hourly,
     cloudfront_refresh,
     cloudtrail_activity_hourly,
@@ -41,6 +45,8 @@ def definitions() -> dg.Definitions:
                 cloudfront_requests,
                 cur_files,
                 cur_line_items,
+                SESSION_STATUS_FILES,
+                SESSION_STATUS_BRONZE,
                 *GITHUB_RAW_ASSETS,
                 *GITHUB_BRONZE_ASSETS,
             ],
@@ -50,6 +56,7 @@ def definitions() -> dg.Definitions:
                 cloudfront_refresh,
                 cur_refresh,
                 github_raw_refresh,
+                claude_refresh,
             ],
             schedules=[
                 cloudtrail_hourly,
@@ -57,6 +64,7 @@ def definitions() -> dg.Definitions:
                 cloudfront_hourly,
                 cur_hourly,
                 github_raw_hourly,
+                claude_hourly,
             ],
         ),
     )
@@ -218,3 +226,30 @@ def test_github_job_mirrors_then_rebuilds_all_seventeen_event_types_and_nothing_
         asset.key for asset in GITHUB_RAW_ASSETS
     } | {asset.key for asset in GITHUB_BRONZE_ASSETS}
     assert len(GITHUB_RAW_ASSETS) == len(GITHUB_BRONZE_ASSETS) == 17
+
+
+def test_each_claude_tick_is_one_run_with_no_partition_and_a_fresh_run_key():
+    this_hour = run_requests_at(
+        claude_hourly, datetime(2026, 11, 14, 10, 10, tzinfo=timezone.utc)
+    )
+    next_hour = run_requests_at(
+        claude_hourly, datetime(2026, 11, 14, 11, 10, tzinfo=timezone.utc)
+    )
+
+    assert len(this_hour) == len(next_hour) == 1
+    assert all(request.partition_key is None for request in this_hour + next_hour)
+    run_keys = [request.run_key for request in this_hour + next_hour]
+    assert all(run_keys) and len(set(run_keys)) == len(run_keys)
+
+
+def test_claude_runs_hourly_at_ten_past_and_starts_on_its_own():
+    assert claude_hourly.cron_schedule == "10 * * * *"
+    assert claude_hourly.default_status == dg.DefaultScheduleStatus.RUNNING
+
+
+def test_the_claude_schedule_runs_a_job_that_refreshes_the_session_status_raw_files_and_bronze():
+    assert claude_hourly.job_name == claude_refresh.name
+    assert selected_asset_keys(claude_refresh.name) == {
+        SESSION_STATUS_FILES.key,
+        SESSION_STATUS_BRONZE.key,
+    }
