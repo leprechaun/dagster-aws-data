@@ -125,11 +125,3 @@ def parse_raw_file(body: bytes, source_key: str, event_type: str) -> pl.DataFram
 def raw_prefix(event_type: str) -> str:
     """The Raw prefix holding every file of one event type: `github/raw/<event_type>/`."""
     return github_raw_key(f"{SOURCE_PREFIX}/{event_type}/")
-
-
-def event_types_with_new_files(copied_by_type: dict[str, list[int]]) -> list[str]:
-    """The event types where at least one Raw mirror run copied a file, sorted.
-    A Bronze table only needs rebuilding when its type gained a file."""
-    return sorted(
-        t for t, counts in copied_by_type.items() if any(n > 0 for n in counts)
-    )

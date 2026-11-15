@@ -7,6 +7,7 @@ from aws_data.defs.cloudtrail.cloudtrail_events import cloudtrail_events
 from aws_data.defs.cloudtrail.cloudtrail_raw_files import cloudtrail_files
 from aws_data.defs.cur.cur_line_items import cur_line_items
 from aws_data.defs.cur.cur_raw_files import cur_files
+from aws_data.defs.github.github_bronze_assets import GITHUB_BRONZE_ASSETS
 from aws_data.defs.github.github_raw_files import GITHUB_RAW_ASSETS
 from aws_data.lib.cloudfront_s3 import CLOUDFRONT_PARTITIONS_DEF
 from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
@@ -44,11 +45,12 @@ cur_refresh = dg.define_asset_job(
     "cur_refresh",
     selection=[cur_files, cur_line_items],
 )
-# All 17 GitHub event types, mirrored together. They share the project pool, so
-# they run one at a time, but one job keeps them on one schedule.
+# All 17 GitHub event types: each Raw mirror, then every Bronze table downstream
+# of it. They share the project pool, so they run one at a time, but one job
+# keeps them on one schedule and rebuilds Bronze in the same run as Raw.
 github_raw_refresh = dg.define_asset_job(
     "github_raw_refresh",
-    selection=GITHUB_RAW_ASSETS,
+    selection=[*GITHUB_RAW_ASSETS, *GITHUB_BRONZE_ASSETS],
 )
 
 

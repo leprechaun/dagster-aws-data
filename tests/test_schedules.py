@@ -11,6 +11,7 @@ from aws_data.defs.cloudtrail.cloudtrail_events import cloudtrail_events
 from aws_data.defs.cloudtrail.cloudtrail_raw_files import cloudtrail_files
 from aws_data.defs.cur.cur_line_items import cur_line_items
 from aws_data.defs.cur.cur_raw_files import cur_files
+from aws_data.defs.github.github_bronze_assets import GITHUB_BRONZE_ASSETS
 from aws_data.defs.github.github_raw_files import GITHUB_RAW_ASSETS
 from aws_data.defs.resources import resources
 from aws_data.defs.schedules import (
@@ -41,6 +42,7 @@ def definitions() -> dg.Definitions:
                 cur_files,
                 cur_line_items,
                 *GITHUB_RAW_ASSETS,
+                *GITHUB_BRONZE_ASSETS,
             ],
             jobs=[
                 cloudtrail_refresh,
@@ -210,9 +212,9 @@ def test_github_raw_runs_hourly_at_its_own_minute_and_starts_on_its_own():
     assert github_raw_hourly.default_status == dg.DefaultScheduleStatus.RUNNING
 
 
-def test_github_raw_job_mirrors_all_seventeen_event_types_and_nothing_else():
+def test_github_job_mirrors_then_rebuilds_all_seventeen_event_types_and_nothing_else():
     assert github_raw_hourly.job_name == github_raw_refresh.name
     assert selected_asset_keys(github_raw_refresh.name) == {
         asset.key for asset in GITHUB_RAW_ASSETS
-    }
-    assert len(GITHUB_RAW_ASSETS) == 17
+    } | {asset.key for asset in GITHUB_BRONZE_ASSETS}
+    assert len(GITHUB_RAW_ASSETS) == len(GITHUB_BRONZE_ASSETS) == 17
