@@ -132,6 +132,16 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "deployment_sha": ("deployment.sha", pl.Utf8),
         "deployment_created_at": ("deployment.created_at", pl.Datetime("us", "UTC")),
     },
+    "deployment_status": {
+        "deployment_status_id": ("deployment_status.id", pl.Int64),
+        "deployment_status_state": ("deployment_status.state", pl.Utf8),
+        "deployment_status_environment": ("deployment_status.environment", pl.Utf8),
+        "deployment_status_deployment_id": ("deployment.id", pl.Int64),
+        "deployment_status_created_at": (
+            "deployment_status.created_at",
+            pl.Datetime("us", "UTC"),
+        ),
+    },
 }
 
 
