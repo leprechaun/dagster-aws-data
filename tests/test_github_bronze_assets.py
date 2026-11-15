@@ -79,6 +79,13 @@ def test_there_is_one_unpartitioned_bronze_table_per_event_type_under_github():
         assert asset.op.name == f"github__bronze__{event_type}"
 
 
+def test_every_bronze_table_has_a_description_so_it_is_written_to_the_delta_table():
+    for event_type, asset in zip(GITHUB_EVENT_TYPES, GITHUB_BRONZE_ASSETS):
+        spec = asset.specs_by_key[dg.AssetKey(["github", "bronze", event_type])]
+        assert spec.description
+        assert f"`{event_type}`" in spec.description
+
+
 def test_the_tables_are_written_under_github_in_storage():
     from aws_data.defs.resources import resources
     from aws_data.lib.cloudtrail_s3 import STORAGE_BUCKET

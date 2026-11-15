@@ -17,6 +17,11 @@ def github_bronze_asset(event_type: str) -> dg.AssetsDefinition:
         key_prefix=["github", "bronze"],
         group_name="github",
         kinds={"s3", "deltalake"},
+        description=(
+            f"Bronze: every GitHub `{event_type}` webhook delivery, one row per delivery, "
+            f"rebuilt in full from the Raw mirror under github/raw/{event_type}/. Envelope "
+            "and common GitHub fields as columns; the full payload as JSON in `payload`."
+        ),
         deps=[dg.AssetKey(["github", "raw", f"{event_type}_files"])],
         io_manager_key="github_bronze_io_manager",
         pool=PROJECT_PREFIX,
