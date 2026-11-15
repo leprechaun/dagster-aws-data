@@ -178,14 +178,22 @@ def resources() -> dg.Definitions:
     # name - so key_prefix maps 1:1 to the medallion layer (bronze/silver/gold).
     # Only those last two asset-key parts place a table, so the project
     # namespace lives in the root: s3://<bucket>/<project>, beside the Raw files.
+    storage_options = S3Config(
+        access_key_id=dg.EnvVar("AWS_ACCESS_KEY_ID"),
+        secret_access_key=dg.EnvVar("AWS_SECRET_ACCESS_KEY"),
+        endpoint=dg.EnvVar("AWS_ENDPOINT_URL_S3"),
+        region="us-east-1",
+    )
     deltalake_io_manager = DescribedDeltaLakePolarsIOManager(
         root_uri=f"s3://{STORAGE_BUCKET}/{PROJECT_PREFIX}",
-        storage_options=S3Config(
-            access_key_id=dg.EnvVar("AWS_ACCESS_KEY_ID"),
-            secret_access_key=dg.EnvVar("AWS_SECRET_ACCESS_KEY"),
-            endpoint=dg.EnvVar("AWS_ENDPOINT_URL_S3"),
-            region="us-east-1",
-        ),
+        storage_options=storage_options,
+    )
+    # GitHub's Bronze tables sit beside its Raw files, under github/ rather than
+    # the project root: a table at github/bronze/check_run is at
+    # s3://<bucket>/github/bronze/check_run.
+    github_bronze_io_manager = DescribedDeltaLakePolarsIOManager(
+        root_uri=f"s3://{STORAGE_BUCKET}/github",
+        storage_options=storage_options,
     )
 
     return dg.Definitions(
@@ -194,6 +202,7 @@ def resources() -> dg.Definitions:
             "github_source_s3": github_source_s3,
             "minio_s3": minio_s3,
             "io_manager": deltalake_io_manager,
+            "github_bronze_io_manager": github_bronze_io_manager,
             "raw_files_io_manager": RawFilesIOManager(),
         }
     )

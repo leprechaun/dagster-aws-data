@@ -19,6 +19,7 @@ from aws_data.lib.s3 import list_keys
     # Not partitioned: all of Raw is under 200 MB, so the table is rebuilt in
     # full from every Raw file each run.
     deps=[dg.AssetKey(["github", "raw", "check_run_files"])],
+    io_manager_key="github_bronze_io_manager",
     pool=PROJECT_PREFIX,
 )
 def check_run(minio_s3: S3Resource) -> pl.DataFrame:

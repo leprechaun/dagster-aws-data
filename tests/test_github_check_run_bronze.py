@@ -15,7 +15,7 @@ def materialize_bronze(raw: FakeS3Client) -> dg.ExecuteInProcessResult:
             [check_run],
             resources={
                 "minio_s3": FakeS3Resource(raw),
-                "io_manager": dg.mem_io_manager,
+                "github_bronze_io_manager": dg.mem_io_manager,
             },
         )
 
@@ -46,3 +46,15 @@ def test_with_no_raw_files_the_table_is_empty_and_does_not_fail():
 
 def test_the_table_is_not_partitioned():
     assert check_run.partitions_def is None
+
+
+def test_the_table_is_written_under_github_in_storage():
+    from aws_data.defs.resources import resources
+    from aws_data.lib.cloudtrail_s3 import STORAGE_BUCKET
+
+    key = dg.AssetKey(["github", "bronze", "check_run"])
+    io_manager_key = check_run.get_io_manager_key_for_asset_key(key)
+    manager = resources().resources[io_manager_key]
+
+    assert io_manager_key == "github_bronze_io_manager"
+    assert manager.root_uri == f"s3://{STORAGE_BUCKET}/github"
