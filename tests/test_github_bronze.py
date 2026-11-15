@@ -1,7 +1,7 @@
 import json
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
-from aws_data.lib.github_bronze import parse_check_run_file, rows_for_utc_day
+from aws_data.lib.github_bronze import parse_check_run_file
 from tests.github_envelopes import envelope, one_line
 
 SOURCE_KEY = "github/raw/check_run/2026/09/08/webhooks-2-2026-09-08-17-17-42-abc"
@@ -76,16 +76,3 @@ def test_envelopes_sharing_an_id_are_both_kept_as_separate_rows():
     assert df.height == 2
     assert df["id"].to_list() == [same_id, same_id]
 
-
-def test_only_rows_whose_utc_time_falls_on_the_day_are_kept():
-    body = (
-        one_line(envelope(id="before", time="2026-09-07T23:59:59Z"))
-        + one_line(envelope(id="start", time="2026-09-08T00:00:00Z"))
-        + one_line(envelope(id="end", time="2026-09-08T23:59:59Z"))
-        + one_line(envelope(id="after", time="2026-09-09T00:00:00Z"))
-    )
-    df = parse_check_run_file(body, SOURCE_KEY)
-
-    kept = rows_for_utc_day(df, date(2026, 9, 8))
-
-    assert kept["id"].to_list() == ["start", "end"]

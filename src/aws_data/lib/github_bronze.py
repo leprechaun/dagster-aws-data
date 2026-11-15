@@ -4,7 +4,7 @@ Pure functions only: bytes in, rows out. Nothing here touches S3 or Delta.
 """
 
 import json
-from datetime import date, datetime
+from datetime import datetime
 
 import polars as pl
 
@@ -65,11 +65,4 @@ def parse_check_run_file(body: bytes, source_key: str) -> pl.DataFrame:
     return pl.DataFrame(rows, schema=CHECK_RUN_SCHEMA)
 
 
-def rows_for_utc_day(df: pl.DataFrame, day: date) -> pl.DataFrame:
-    """The rows whose envelope `time` falls on `day` in UTC."""
-    return df.filter(pl.col("time").dt.date() == day)
-
-
-def raw_check_run_prefix(day: date) -> str:
-    """The Raw prefix holding one UTC day of check_run files: `github/raw/check_run/yyyy/mm/dd/`."""
-    return github_raw_key(f"{SOURCE_PREFIX}/check_run/{day:%Y/%m/%d}/")
+CHECK_RUN_RAW_PREFIX = github_raw_key(f"{SOURCE_PREFIX}/check_run/")
