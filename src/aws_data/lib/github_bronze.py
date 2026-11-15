@@ -158,6 +158,11 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "comment_author_association": ("comment.author_association", pl.Utf8),
         "comment_created_at": ("comment.created_at", pl.Datetime("us", "UTC")),
     },
+    "label": {
+        "label_id": ("label.id", pl.Int64),
+        "label_name": ("label.name", pl.Utf8),
+        "label_color": ("label.color", pl.Utf8),
+    },
 }
 
 
