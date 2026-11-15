@@ -45,6 +45,15 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "check_run_started_at": ("check_run.started_at", pl.Datetime("us", "UTC")),
         "check_run_completed_at": ("check_run.completed_at", pl.Datetime("us", "UTC")),
     },
+    "check_suite": {
+        "check_suite_id": ("check_suite.id", pl.Int64),
+        "check_suite_head_branch": ("check_suite.head_branch", pl.Utf8),
+        "check_suite_head_sha": ("check_suite.head_sha", pl.Utf8),
+        "check_suite_status": ("check_suite.status", pl.Utf8),
+        "check_suite_conclusion": ("check_suite.conclusion", pl.Utf8),
+        "check_suite_created_at": ("check_suite.created_at", pl.Datetime("us", "UTC")),
+        "check_suite_updated_at": ("check_suite.updated_at", pl.Datetime("us", "UTC")),
+    },
 }
 
 
