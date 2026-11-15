@@ -171,6 +171,15 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "release_prerelease": ("release.prerelease", pl.Boolean),
         "release_published_at": ("release.published_at", pl.Datetime("us", "UTC")),
     },
+    "repository_vulnerability_alert": {
+        "alert_id": ("alert.id", pl.Int64),
+        "alert_number": ("alert.number", pl.Int64),
+        "alert_state": ("alert.state", pl.Utf8),
+        "alert_affected_package_name": ("alert.affected_package_name", pl.Utf8),
+        "alert_severity": ("alert.severity", pl.Utf8),
+        "alert_ghsa_id": ("alert.ghsa_id", pl.Utf8),
+        "alert_created_at": ("alert.created_at", pl.Datetime("us", "UTC")),
+    },
 }
 
 
