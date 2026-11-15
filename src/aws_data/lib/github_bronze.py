@@ -119,6 +119,11 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "create_master_branch": ("master_branch", pl.Utf8),
         "create_pusher_type": ("pusher_type", pl.Utf8),
     },
+    "delete": {
+        "delete_ref": ("ref", pl.Utf8),
+        "delete_ref_type": ("ref_type", pl.Utf8),
+        "delete_pusher_type": ("pusher_type", pl.Utf8),
+    },
 }
 
 
