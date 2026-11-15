@@ -89,3 +89,16 @@ def test_the_description_names_a_claude_session_status_and_warns_against_summing
     assert "Claude Session Status" in description
     assert "running totals" in description
     assert "must not be summed" in description
+
+
+def test_the_nested_payload_columns_reach_the_materialized_table():
+    raw = FakeS3Client(objects={STATUS_DAY_1: one_line(envelope(id="nested"))})
+
+    result = materialize(raw)
+
+    df = result.output_for_node(SESSION_STATUS_BRONZE.op.name)
+    row = df.row(0, named=True)
+    assert row["model"] == {"id": "model-alpha", "display_name": "Model Alpha"}
+    assert row["rate_limits"]["five_hour"]["used_percentage"] == 23
+    assert row["workspace"]["repo"]["owner"] == "sample-org"
+    assert df.schema == bronze_schema()
