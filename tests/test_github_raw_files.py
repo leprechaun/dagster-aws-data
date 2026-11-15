@@ -1,7 +1,9 @@
 import dagster as dg
 from dagster._core.test_utils import freeze_time
 
-from aws_data.defs.github.github_raw_files import check_run_files
+from aws_data.defs.github.github_raw_files import github_raw_files_asset
+
+check_run_files = github_raw_files_asset("check_run")
 from tests.conftest import (
     AFTER_THE_DAYS_UNDER_TEST,
     FakeS3Client,

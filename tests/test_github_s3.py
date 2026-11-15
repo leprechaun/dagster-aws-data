@@ -1,6 +1,6 @@
 from datetime import date
 
-from aws_data.lib.github_s3 import RAW_PREFIX, github_day_prefix, github_raw_key
+from aws_data.lib.github_s3 import RAW_PREFIX, github_raw_key, keys_for_days
 from aws_data.lib.s3 import mirror_prefixes
 from tests.conftest import FakeS3Client
 
@@ -15,13 +15,6 @@ def test_raw_key_drops_the_data_segment_and_keeps_the_rest_of_the_key():
     )
 
 
-def test_day_prefix_is_the_source_folder_for_one_event_type_and_day():
-    assert (
-        github_day_prefix("check_run", date(2026, 8, 8))
-        == "data/github/check_run/2026/08/08/"
-    )
-
-
 def test_mirror_copies_one_day_of_one_event_type_to_raw_keys_byte_for_byte():
     source = FakeS3Client(
         objects={
@@ -32,7 +25,7 @@ def test_mirror_copies_one_day_of_one_event_type_to_raw_keys_byte_for_byte():
         }
     )
     dest = FakeS3Client()
-    day_prefix = github_day_prefix("check_run", date(2026, 8, 8))
+    day_prefix = "data/github/check_run/2026/08/08/"
 
     result = mirror_prefixes(
         source,
@@ -56,7 +49,7 @@ def test_mirror_copies_one_day_of_one_event_type_to_raw_keys_byte_for_byte():
 def test_rerunning_the_github_mirror_copies_nothing_new():
     source = FakeS3Client(objects={"data/github/check_run/2026/08/08/a.json": b"one"})
     dest = FakeS3Client()
-    day_prefix = github_day_prefix("check_run", date(2026, 8, 8))
+    day_prefix = "data/github/check_run/2026/08/08/"
     mirror = lambda: mirror_prefixes(
         source,
         "firehose",
@@ -79,7 +72,7 @@ def test_mirroring_an_empty_day_copies_nothing_and_does_not_fail():
     result = mirror_prefixes(
         FakeS3Client(),
         "firehose",
-        [github_day_prefix("check_run", date(2026, 8, 8))],
+        ["data/github/check_run/2026/08/08/"],
         ".json",
         FakeS3Client(),
         "deltalake",
@@ -89,3 +82,18 @@ def test_mirroring_an_empty_day_copies_nothing_and_does_not_fail():
 
     assert result.files_copied == 0
     assert result.files_already_cached == 0
+
+
+def test_keys_for_days_keeps_only_the_keys_whose_folder_day_is_selected():
+    keys = [
+        "data/github/check_run/2026/08/08/a",
+        "data/github/check_run/2026/08/08/10/b",
+        "data/github/check_run/2026/08/09/c",
+        "data/github/check_run/2026/08/10/d",
+    ]
+
+    assert keys_for_days(keys, "check_run", {date(2026, 8, 8), date(2026, 8, 10)}) == [
+        "data/github/check_run/2026/08/08/a",
+        "data/github/check_run/2026/08/08/10/b",
+        "data/github/check_run/2026/08/10/d",
+    ]

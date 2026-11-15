@@ -5,48 +5,63 @@ from dagster_aws.s3 import S3Resource
 
 from aws_data.lib.cloudtrail_s3 import PROJECT_PREFIX, STORAGE_BUCKET
 from aws_data.lib.github_s3 import (
+    GITHUB_EVENT_TYPES,
     GITHUB_PARTITIONS_DEF,
-    RAW_PREFIX,
     SOURCE_BUCKET,
-    github_day_prefix,
+    SOURCE_PREFIX,
     github_raw_key,
+    keys_for_days,
 )
-from aws_data.lib.s3 import mirror_prefixes
+from aws_data.lib.s3 import list_keys, mirror_keys
 
 
-@dg.asset(
-    name="check_run_files",
-    key_prefix=["github", "raw"],
-    partitions_def=GITHUB_PARTITIONS_DEF,
-    group_name="github",
-    kinds={"s3"},
-    io_manager_key="raw_files_io_manager",
-    # Shared project pool (see PROJECT_PREFIX), as for the other raw assets.
-    pool=PROJECT_PREFIX,
-)
-def check_run_files(
-    context: dg.AssetExecutionContext,
-    github_source_s3: S3Resource,
-    minio_s3: S3Resource,
-) -> None:
-    """Mirrors one UTC day of check_run deliveries from the firehose bucket to
-    Raw, byte-for-byte, with the `data/` segment dropped from each key."""
-    day = date.fromisoformat(context.partition_key)
-    mirrored = mirror_prefixes(
-        github_source_s3.get_client(),
-        SOURCE_BUCKET,
-        [github_day_prefix("check_run", day)],
-        "",
-        minio_s3.get_client(),
-        STORAGE_BUCKET,
-        RAW_PREFIX,
-        dest_key=github_raw_key,
+def github_raw_files_asset(event_type: str) -> dg.AssetsDefinition:
+    """One asset per event type. It is a single-run backfill: a backfill of many
+    days is one run that lists the type's folder once and copies every selected
+    day, rather than one run per day."""
+
+    @dg.asset(
+        name=f"{event_type}_files",
+        key_prefix=["github", "raw"],
+        partitions_def=GITHUB_PARTITIONS_DEF,
+        backfill_policy=dg.BackfillPolicy.single_run(),
+        group_name="github",
+        kinds={"s3"},
+        io_manager_key="raw_files_io_manager",
+        # Shared project pool (see PROJECT_PREFIX), as for the other raw assets.
+        pool=PROJECT_PREFIX,
     )
+    def _asset(
+        context: dg.AssetExecutionContext,
+        github_source_s3: S3Resource,
+        minio_s3: S3Resource,
+    ) -> None:
+        days = {date.fromisoformat(key) for key in context.partition_keys}
+        source_client = github_source_s3.get_client()
+        folder = f"{SOURCE_PREFIX}/{event_type}/"
+        keys = list_keys(source_client, SOURCE_BUCKET, folder)
+        mirrored = mirror_keys(
+            source_client,
+            SOURCE_BUCKET,
+            keys_for_days(keys, event_type, days),
+            minio_s3.get_client(),
+            STORAGE_BUCKET,
+            github_raw_key,
+            folder,
+        )
 
-    context.add_output_metadata(
-        {
-            "files_copied": mirrored.files_copied,
-            "files_already_cached": mirrored.files_already_cached,
-            "bytes_copied": mirrored.bytes_copied,
-        }
-    )
+        context.add_output_metadata(
+            {
+                "days": len(days),
+                "files_copied": mirrored.files_copied,
+                "files_already_cached": mirrored.files_already_cached,
+                "bytes_copied": mirrored.bytes_copied,
+            }
+        )
+
+    return _asset
+
+
+GITHUB_RAW_ASSETS: list[dg.AssetsDefinition] = [
+    github_raw_files_asset(t) for t in GITHUB_EVENT_TYPES
+]

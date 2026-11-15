@@ -63,7 +63,9 @@ def mirror_prefixes(
     files_already_cached = 0
     to_copy: list[str] = []
     for source_prefix in source_prefixes:
-        already_there = set(list_keys(dest_client, dest_bucket, to_dest(source_prefix), suffix))
+        already_there = set(
+            list_keys(dest_client, dest_bucket, to_dest(source_prefix), suffix)
+        )
         for key in list_keys(source_client, source_bucket, source_prefix, suffix):
             if to_dest(key) in already_there:
                 files_already_cached += 1
@@ -146,3 +148,32 @@ def sync_prefix(
     for key in to_delete:
         dest_client.delete_object(Bucket=dest_bucket, Key=f"{dest_root}{key}")
     return SyncResult(len(to_copy), len(source) - len(to_copy), len(to_delete), bytes_copied)
+
+
+def mirror_keys(
+    source_client,
+    source_bucket: str,
+    source_keys: list[str],
+    dest_client,
+    dest_bucket: str,
+    dest_key: Callable[[str], str],
+    dest_listing_prefix: str,
+    max_workers: int = 16,
+) -> MirrorResult:
+    """Copies the given source keys to the destination, byte-for-byte, mapping
+    each key with `dest_key`. Keys already at the destination are skipped, found
+    with one listing under `dest_key(dest_listing_prefix)`, so a caller can list
+    a whole folder once and pass only the keys it wants."""
+    already_there = set(
+        list_keys(dest_client, dest_bucket, dest_key(dest_listing_prefix))
+    )
+    to_copy = [key for key in source_keys if dest_key(key) not in already_there]
+
+    def copy(key: str) -> int:
+        body = source_client.get_object(Bucket=source_bucket, Key=key)["Body"].read()
+        dest_client.put_object(Bucket=dest_bucket, Key=dest_key(key), Body=body)
+        return len(body)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        bytes_copied = sum(pool.map(copy, to_copy))
+    return MirrorResult(len(to_copy), len(source_keys) - len(to_copy), bytes_copied)

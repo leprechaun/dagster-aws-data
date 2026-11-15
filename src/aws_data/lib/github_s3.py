@@ -15,6 +15,28 @@ GITHUB_SOURCE_REGION = "ap-southeast-1"
 SOURCE_PREFIX = "data/github"
 RAW_PREFIX = "github/raw"
 
+# Every event type that is ingested. `default` is left out: its one file is a
+# duplicate delivery of a `create` event.
+GITHUB_EVENT_TYPES = (
+    "check_run",
+    "check_suite",
+    "create",
+    "delete",
+    "dependabot_alert",
+    "deployment",
+    "deployment_status",
+    "issue_comment",
+    "issues",
+    "label",
+    "push",
+    "release",
+    "repository",
+    "repository_ruleset",
+    "repository_vulnerability_alert",
+    "workflow_job",
+    "workflow_run",
+)
+
 # The first day any GitHub delivery appears in the source bucket.
 GITHUB_HISTORY_START_DATE = "2025-01-30"
 
@@ -30,6 +52,14 @@ def github_raw_key(source_key: str) -> str:
     return RAW_PREFIX + source_key.removeprefix(SOURCE_PREFIX)
 
 
-def github_day_prefix(event_type: str, day: date) -> str:
-    """The source folder holding one event type's deliveries for one UTC day."""
-    return f"{SOURCE_PREFIX}/{event_type}/{day.year:04d}/{day.month:02d}/{day.day:02d}/"
+def keys_for_days(keys: list[str], event_type: str, days: set[date]) -> list[str]:
+    """The source keys under one event type whose `yyyy/mm/dd` folder is one of
+    `days`. Keys may sit one folder deeper (by hour); the day is always the three
+    segments right after the event type."""
+    folder = f"{SOURCE_PREFIX}/{event_type}/"
+    selected = []
+    for key in keys:
+        year, month, day = key.removeprefix(folder).split("/")[:3]
+        if date(int(year), int(month), int(day)) in days:
+            selected.append(key)
+    return selected
