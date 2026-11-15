@@ -186,6 +186,9 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "repository_ruleset_target": ("repository_ruleset.target", pl.Utf8),
         "repository_ruleset_enforcement": ("repository_ruleset.enforcement", pl.Utf8),
     },
+    # Deliberately empty: a repository delivery carries only the action and the
+    # repository itself, which the common columns already cover.
+    "repository": {},
 }
 
 
