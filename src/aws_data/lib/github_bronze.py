@@ -2,8 +2,9 @@
 
 Pure functions only: bytes in, rows out. Nothing here touches S3 or Delta.
 
-Every event type shares one schema: the envelope, the fields common to GitHub
-payloads, and the full payload as JSON for everything type-specific.
+Every event type has the envelope and the fields common to GitHub payloads.
+A type with a spec in TYPE_COLUMNS adds its own typed columns after those, and
+the full payload as JSON always comes last.
 """
 
 import json
@@ -13,7 +14,7 @@ import polars as pl
 
 from aws_data.lib.github_s3 import SOURCE_PREFIX, github_raw_key
 
-BRONZE_SCHEMA = {
+COMMON_SCHEMA = {
     "id": pl.Utf8,
     "time": pl.Datetime("us", "UTC"),
     "account": pl.Utf8,
@@ -27,16 +28,61 @@ BRONZE_SCHEMA = {
     "organization_name": pl.Utf8,
     "sender_id": pl.Int64,
     "sender_name": pl.Utf8,
-    "payload": pl.Utf8,
+}
+
+# Per event type: column name -> (dotted path into the payload, Polars dtype).
+# A type without an entry keeps only the common columns.
+TYPE_COLUMNS: dict[str, dict[str, tuple[str, pl.DataType]]] = {
+    "check_run": {
+        "check_run_id": ("check_run.id", pl.Int64),
+        "check_run_name": ("check_run.name", pl.Utf8),
+        "check_run_head_sha": ("check_run.head_sha", pl.Utf8),
+        "check_run_status": ("check_run.status", pl.Utf8),
+        "check_run_conclusion": ("check_run.conclusion", pl.Utf8),
+        "check_run_started_at": ("check_run.started_at", pl.Datetime("us", "UTC")),
+        "check_run_completed_at": ("check_run.completed_at", pl.Datetime("us", "UTC")),
+    },
 }
 
 
-def _row(envelope: dict, source_key: str) -> dict:
+def bronze_schema(event_type: str) -> dict[str, pl.DataType]:
+    """The full ordered Bronze schema for one event type: the common columns,
+    then the type's typed columns, then the full payload as JSON last."""
+    typed = {
+        name: dtype for name, (_, dtype) in TYPE_COLUMNS.get(event_type, {}).items()
+    }
+    return {**COMMON_SCHEMA, **typed, "payload": pl.Utf8}
+
+
+def _dig(payload: dict, path: str):
+    """The value at a dotted path, or None if any level is missing."""
+    value = payload
+    for key in path.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
+
+
+def _typed_value(value, dtype: pl.DataType):
+    if value is None or not isinstance(dtype, pl.Datetime):
+        return value
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _typed_columns(payload: dict, event_type: str) -> dict:
+    return {
+        name: _typed_value(_dig(payload, path), dtype)
+        for name, (path, dtype) in TYPE_COLUMNS.get(event_type, {}).items()
+    }
+
+
+def _row(envelope: dict, source_key: str, event_type: str) -> dict:
     payload = envelope["detail"]["payload"]
     repository = payload.get("repository", {})
     organization = payload.get("organization", {})
     sender = payload.get("sender", {})
-    return {
+    row = {
         "id": envelope["id"],
         "time": datetime.fromisoformat(envelope["time"].replace("Z", "+00:00")),
         "account": envelope["account"],
@@ -50,18 +96,20 @@ def _row(envelope: dict, source_key: str) -> dict:
         "organization_name": organization.get("login"),
         "sender_id": sender.get("id"),
         "sender_name": sender.get("login"),
-        "payload": json.dumps(payload),
     }
+    row.update(_typed_columns(payload, event_type))
+    row["payload"] = json.dumps(payload)
+    return row
 
 
-def parse_raw_file(body: bytes, source_key: str) -> pl.DataFrame:
+def parse_raw_file(body: bytes, source_key: str, event_type: str) -> pl.DataFrame:
     """One row per envelope in a Raw file, one-line or multi-line JSON."""
     rows = [
-        _row(json.loads(line), source_key)
+        _row(json.loads(line), source_key, event_type)
         for line in body.decode().splitlines()
         if line.strip()
     ]
-    return pl.DataFrame(rows, schema=BRONZE_SCHEMA)
+    return pl.DataFrame(rows, schema=bronze_schema(event_type))
 
 
 def raw_prefix(event_type: str) -> str:
