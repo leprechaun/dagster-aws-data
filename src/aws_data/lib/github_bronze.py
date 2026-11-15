@@ -189,6 +189,14 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
     # Deliberately empty: a repository delivery carries only the action and the
     # repository itself, which the common columns already cover.
     "repository": {},
+    "dependabot_alert": {
+        "alert_number": ("alert.number", pl.Int64),
+        "alert_state": ("alert.state", pl.Utf8),
+        "alert_package_name": ("alert.dependency.package.name", pl.Utf8),
+        "alert_severity": ("alert.security_advisory.severity", pl.Utf8),
+        "alert_ghsa_id": ("alert.security_advisory.ghsa_id", pl.Utf8),
+        "alert_created_at": ("alert.created_at", pl.Datetime("us", "UTC")),
+    },
 }
 
 
