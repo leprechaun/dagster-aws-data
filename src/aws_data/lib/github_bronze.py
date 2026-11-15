@@ -54,6 +54,27 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "check_suite_created_at": ("check_suite.created_at", pl.Datetime("us", "UTC")),
         "check_suite_updated_at": ("check_suite.updated_at", pl.Datetime("us", "UTC")),
     },
+    "workflow_run": {
+        "workflow_run_id": ("workflow_run.id", pl.Int64),
+        "workflow_run_name": ("workflow_run.name", pl.Utf8),
+        "workflow_run_workflow_id": ("workflow_run.workflow_id", pl.Int64),
+        "workflow_run_check_suite_id": ("workflow_run.check_suite_id", pl.Int64),
+        "workflow_run_run_number": ("workflow_run.run_number", pl.Int64),
+        "workflow_run_run_attempt": ("workflow_run.run_attempt", pl.Int64),
+        "workflow_run_event": ("workflow_run.event", pl.Utf8),
+        "workflow_run_head_branch": ("workflow_run.head_branch", pl.Utf8),
+        "workflow_run_head_sha": ("workflow_run.head_sha", pl.Utf8),
+        "workflow_run_status": ("workflow_run.status", pl.Utf8),
+        "workflow_run_conclusion": ("workflow_run.conclusion", pl.Utf8),
+        "workflow_run_run_started_at": (
+            "workflow_run.run_started_at",
+            pl.Datetime("us", "UTC"),
+        ),
+        "workflow_run_updated_at": (
+            "workflow_run.updated_at",
+            pl.Datetime("us", "UTC"),
+        ),
+    },
 }
 
 
