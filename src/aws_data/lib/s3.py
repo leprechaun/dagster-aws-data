@@ -1,5 +1,6 @@
 """S3 helpers shared by every log source."""
 
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import NamedTuple
 
@@ -50,24 +51,28 @@ def mirror_prefixes(
     dest_bucket: str,
     dest_prefix: str,
     max_workers: int = 16,
+    dest_key: Callable[[str], str] | None = None,
 ) -> MirrorResult:
     """Copies every `suffix` file under the source prefixes to the destination,
-    byte-for-byte, under `dest_prefix` and keeping the source key. What's
-    already there is found with one listing per prefix and skipped; the rest is
-    copied by one thread pool across all the prefixes."""
+    byte-for-byte. By default the key is kept under `dest_prefix`; `dest_key`
+    replaces that mapping, and then `dest_prefix` is unused. `dest_key` must map
+    prefixes the same way it maps keys. What's already there is found with one
+    listing per prefix and skipped; the rest is copied by one thread pool across
+    all the prefixes."""
+    to_dest: Callable[[str], str] = dest_key or (lambda key: f"{dest_prefix}/{key}")
     files_already_cached = 0
     to_copy: list[str] = []
     for source_prefix in source_prefixes:
-        already_there = set(list_keys(dest_client, dest_bucket, f"{dest_prefix}/{source_prefix}", suffix))
+        already_there = set(list_keys(dest_client, dest_bucket, to_dest(source_prefix), suffix))
         for key in list_keys(source_client, source_bucket, source_prefix, suffix):
-            if f"{dest_prefix}/{key}" in already_there:
+            if to_dest(key) in already_there:
                 files_already_cached += 1
             else:
                 to_copy.append(key)
 
     def copy(key: str) -> int:
         body = source_client.get_object(Bucket=source_bucket, Key=key)["Body"].read()
-        dest_client.put_object(Bucket=dest_bucket, Key=f"{dest_prefix}/{key}", Body=body)
+        dest_client.put_object(Bucket=dest_bucket, Key=to_dest(key), Body=body)
         return len(body)
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
