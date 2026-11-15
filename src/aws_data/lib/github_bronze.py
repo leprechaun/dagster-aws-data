@@ -8,7 +8,9 @@ the full payload as JSON always comes last.
 """
 
 import json
+from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 
 import polars as pl
 
@@ -30,9 +32,10 @@ COMMON_SCHEMA = {
     "sender_name": pl.Utf8,
 }
 
-# Per event type: column name -> (dotted path into the payload, Polars dtype).
+# Per event type: column name -> (source, Polars dtype). The source is a dotted
+# path into the payload, or a function of the payload for a derived value.
 # A type without an entry keeps only the common columns.
-TYPE_COLUMNS: dict[str, dict[str, tuple[str, pl.DataType]]] = {
+TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType]]] = {
     "check_run": {
         "check_run_id": ("check_run.id", pl.Int64),
         "check_run_name": ("check_run.name", pl.Utf8),
@@ -67,13 +70,20 @@ def _dig(payload: dict, path: str):
 def _typed_value(value, dtype: pl.DataType):
     if value is None or not isinstance(dtype, pl.Datetime):
         return value
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _source_value(payload: dict, source: str | Callable[[dict], Any]):
+    return source(payload) if callable(source) else _dig(payload, source)
 
 
 def _typed_columns(payload: dict, event_type: str) -> dict:
     return {
-        name: _typed_value(_dig(payload, path), dtype)
-        for name, (path, dtype) in TYPE_COLUMNS.get(event_type, {}).items()
+        name: _typed_value(_source_value(payload, source), dtype)
+        for name, (source, dtype) in TYPE_COLUMNS.get(event_type, {}).items()
     }
 
 

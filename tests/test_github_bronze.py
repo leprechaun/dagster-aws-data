@@ -2,8 +2,9 @@ import json
 from datetime import datetime, timezone
 
 import polars as pl
+import pytest
 
-from aws_data.lib.github_bronze import bronze_schema, parse_raw_file
+from aws_data.lib.github_bronze import TYPE_COLUMNS, bronze_schema, parse_raw_file
 from tests.github_envelopes import envelope, one_line
 
 SOURCE_KEY = "github/raw/check_run/2026/09/08/webhooks-2-2026-09-08-17-17-42-abc"
@@ -120,38 +121,81 @@ def test_a_check_run_field_missing_from_a_delivery_reads_null_and_is_kept():
     )
 
 
-def test_check_run_columns_are_in_schema_order_with_payload_last_and_typed():
+def test_check_run_columns_follow_its_schema_and_the_payload_round_trips():
     delivery = envelope()
 
     df = parse_raw_file(one_line(delivery), SOURCE_KEY, "check_run")
 
-    assert df.columns == [
-        "id",
-        "time",
-        "account",
-        "region",
-        "detail_type",
-        "source_file",
-        "action",
-        "repository_id",
-        "repository_name",
-        "organization_id",
-        "organization_name",
-        "sender_id",
-        "sender_name",
-        "check_run_id",
-        "check_run_name",
-        "check_run_head_sha",
-        "check_run_status",
-        "check_run_conclusion",
-        "check_run_started_at",
-        "check_run_completed_at",
-        "payload",
-    ]
-    assert df.schema["check_run_id"] == pl.Int64
-    assert df.schema["check_run_status"] == pl.Utf8
-    assert df.schema["check_run_started_at"] == pl.Datetime("us", "UTC")
+    assert df.schema == bronze_schema("check_run")
     assert json.loads(df.row(0, named=True)["payload"]) == delivery["detail"]["payload"]
+
+
+def test_a_malformed_timestamp_reads_null_and_keeps_the_row():
+    check_run = {
+        "id": 93092064248,
+        "name": "Analyze (python)",
+        "head_sha": "0b43ae6c2f1d9e8a7b5c4d3e2f1a0b9c8d7e6f5a",
+        "status": "queued",
+        "started_at": "",
+    }
+
+    df = parse_raw_file(
+        one_line(envelope(id="bad-time", check_run=check_run)), SOURCE_KEY, "check_run"
+    )
+
+    assert df["id"].to_list() == ["bad-time"]
+    assert df["check_run_started_at"].to_list() == [None]
+
+
+def test_a_spec_entry_can_be_a_value_derived_from_the_payload(monkeypatch):
+    monkeypatch.setitem(
+        TYPE_COLUMNS,
+        "push",
+        {"push_commit_count": (lambda payload: len(payload["commits"]), pl.Int64)},
+    )
+    delivery = envelope(id="push-1", detail_type="push", action=None)
+    delivery["detail"]["payload"]["commits"] = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
+
+    df = parse_raw_file(one_line(delivery), SOURCE_KEY, "push")
+
+    assert df["push_commit_count"].to_list() == [3]
+    assert df.schema["push_commit_count"] == pl.Int64
+
+
+@pytest.mark.parametrize(
+    ("started_at", "expected"),
+    [
+        ("2026-08-08T10:31:39Z", datetime(2026, 8, 8, 10, 31, 39, tzinfo=timezone.utc)),
+        (
+            "2026-08-08T10:31:39.123Z",
+            datetime(2026, 8, 8, 10, 31, 39, 123000, tzinfo=timezone.utc),
+        ),
+        (
+            "2026-08-08T12:31:39+02:00",
+            datetime(2026, 8, 8, 10, 31, 39, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_timestamp_forms_become_utc_datetimes(started_at, expected):
+    check_run = {"id": 93092064248, "started_at": started_at}
+
+    df = parse_raw_file(
+        one_line(envelope(check_run=check_run)), SOURCE_KEY, "check_run"
+    )
+
+    assert df["check_run_started_at"].to_list() == [expected]
+
+
+def test_a_delivery_with_no_check_run_key_reads_every_check_run_column_null():
+    delivery = envelope(detail_type="check_run")
+    del delivery["detail"]["payload"]["check_run"]
+
+    df = parse_raw_file(one_line(delivery), SOURCE_KEY, "check_run")
+
+    assert df.height == 1
+    row = df.row(0, named=True)
+    for column in [name for name in df.columns if name.startswith("check_run_")]:
+        assert row[column] is None, column
 
 
 def test_the_payload_column_keeps_everything_type_specific():
