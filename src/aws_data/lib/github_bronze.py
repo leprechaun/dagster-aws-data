@@ -75,6 +75,26 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
             pl.Datetime("us", "UTC"),
         ),
     },
+    "workflow_job": {
+        "workflow_job_id": ("workflow_job.id", pl.Int64),
+        "workflow_job_run_id": ("workflow_job.run_id", pl.Int64),
+        "workflow_job_workflow_name": ("workflow_job.workflow_name", pl.Utf8),
+        "workflow_job_name": ("workflow_job.name", pl.Utf8),
+        "workflow_job_run_attempt": ("workflow_job.run_attempt", pl.Int64),
+        "workflow_job_head_branch": ("workflow_job.head_branch", pl.Utf8),
+        "workflow_job_head_sha": ("workflow_job.head_sha", pl.Utf8),
+        "workflow_job_status": ("workflow_job.status", pl.Utf8),
+        "workflow_job_conclusion": ("workflow_job.conclusion", pl.Utf8),
+        "workflow_job_started_at": (
+            "workflow_job.started_at",
+            pl.Datetime("us", "UTC"),
+        ),
+        "workflow_job_completed_at": (
+            "workflow_job.completed_at",
+            pl.Datetime("us", "UTC"),
+        ),
+        "workflow_job_runner_name": ("workflow_job.runner_name", pl.Utf8),
+    },
 }
 
 
