@@ -191,18 +191,7 @@ def test_the_cur_schedule_runs_a_job_that_refreshes_raw_and_bronze_of_the_cost_a
     assert selected_asset_keys(cur_refresh.name) == {cur_files.key, cur_line_items.key}
 
 
-def test_github_raw_refreshes_yesterday_and_today_each_hour():
-    requests = run_requests_at(
-        github_raw_hourly, datetime(2026, 11, 13, 10, 30, tzinfo=timezone.utc)
-    )
-
-    assert [request.partition_key for request in requests] == [
-        "2026-11-12",
-        "2026-11-13",
-    ]
-
-
-def test_each_github_raw_tick_launches_fresh_runs_instead_of_being_deduplicated():
+def test_each_github_raw_tick_is_one_run_with_no_partition_and_a_fresh_run_key():
     this_hour = run_requests_at(
         github_raw_hourly, datetime(2026, 11, 14, 10, 30, tzinfo=timezone.utc)
     )
@@ -210,9 +199,10 @@ def test_each_github_raw_tick_launches_fresh_runs_instead_of_being_deduplicated(
         github_raw_hourly, datetime(2026, 11, 14, 11, 30, tzinfo=timezone.utc)
     )
 
+    assert len(this_hour) == len(next_hour) == 1
+    assert all(request.partition_key is None for request in this_hour + next_hour)
     run_keys = [request.run_key for request in this_hour + next_hour]
-    assert len(run_keys) == 4
-    assert len(set(run_keys)) == len(run_keys)
+    assert all(run_keys) and len(set(run_keys)) == len(run_keys)
 
 
 def test_github_raw_runs_hourly_at_its_own_minute_and_starts_on_its_own():

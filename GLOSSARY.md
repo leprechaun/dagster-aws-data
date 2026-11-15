@@ -14,7 +14,7 @@ A Record keeps this name in every layer, including as a row in Bronze.
 _Avoid_: Event, entry
 
 **Delivery Day**:
-The UTC day a source delivered its data. For a CloudTrail Log File, the day in its `yyyy/mm/dd` folder, i.e. when CloudTrail wrote it; it is the partition unit for every CloudTrail layer. For a GitHub Webhook Delivery, the UTC day of its envelope's `time`; it is the partition unit for every GitHub layer. A Record's own event time can fall on the previous day (observed for Records in the last minutes of a day), so Delivery Day is not the same as the day the activity happened.
+The UTC day a source delivered its data. For a CloudTrail Log File, the day in its `yyyy/mm/dd` folder, i.e. when CloudTrail wrote it; it is the partition unit for every CloudTrail layer. For a GitHub Webhook Delivery, the UTC day of its envelope's `time`, which is the day folder it sits under; GitHub layers are unpartitioned, so Delivery Day is not a partition unit there. A Record's own event time can fall on the previous day (observed for Records in the last minutes of a day), so Delivery Day is not the same as the day the activity happened.
 _Avoid_: Event date, partition date
 
 **Request**:

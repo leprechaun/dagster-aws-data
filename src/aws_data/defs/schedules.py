@@ -11,7 +11,6 @@ from aws_data.defs.github.github_raw_files import GITHUB_RAW_ASSETS
 from aws_data.lib.cloudfront_s3 import CLOUDFRONT_PARTITIONS_DEF
 from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
 from aws_data.lib.cur_s3 import CUR_PARTITIONS_DEF
-from aws_data.lib.github_s3 import GITHUB_PARTITIONS_DEF
 from aws_data.lib.refresh import billing_periods_to_refresh, partitions_to_refresh
 
 # Each hour, mirror whatever has arrived for the latest two days and rebuild
@@ -108,10 +107,6 @@ def cur_hourly(context: dg.ScheduleEvaluationContext):
     default_status=dg.DefaultScheduleStatus.RUNNING,
 )
 def github_raw_hourly(context: dg.ScheduleEvaluationContext):
-    for partition_key in partitions_to_refresh(
-        context.scheduled_execution_time, GITHUB_PARTITIONS_DEF
-    ):
-        yield dg.RunRequest(
-            partition_key=partition_key,
-            run_key=f"{partition_key}@{context.scheduled_execution_time.isoformat()}",
-        )
+    # The Raw assets are unpartitioned: one run per tick lists each type's folder
+    # and copies whatever is new.
+    yield dg.RunRequest(run_key=context.scheduled_execution_time.isoformat())
