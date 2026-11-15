@@ -142,6 +142,16 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
             pl.Datetime("us", "UTC"),
         ),
     },
+    "issues": {
+        "issue_id": ("issue.id", pl.Int64),
+        "issue_number": ("issue.number", pl.Int64),
+        "issue_title": ("issue.title", pl.Utf8),
+        "issue_state": ("issue.state", pl.Utf8),
+        "issue_state_reason": ("issue.state_reason", pl.Utf8),
+        "issue_created_at": ("issue.created_at", pl.Datetime("us", "UTC")),
+        "issue_closed_at": ("issue.closed_at", pl.Datetime("us", "UTC")),
+        "issue_label_name": ("label.name", pl.Utf8),
+    },
 }
 
 
