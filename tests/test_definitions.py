@@ -46,3 +46,17 @@ def test_the_project_loads_the_claude_refresh_job_and_its_hourly_schedule():
 
     assert repository.get_job("claude_refresh") is not None
     assert repository.get_schedule_def("claude_hourly").cron_schedule == "10 * * * *"
+
+
+def test_the_claude_bronze_table_is_in_the_claude_group_and_depends_on_its_raw_asset():
+    asset_graph = defs().resolve_asset_graph()
+    bronze = dg.AssetKey(["claude", "bronze", "session_status"])
+
+    assert asset_graph.get(bronze).group_name == "claude"
+    assert dg.AssetKey(["claude", "raw", "session_status_files"]) in (
+        asset_graph.get(bronze).parent_keys
+    )
+    assert (
+        defs().resolve_assets_def(bronze).get_io_manager_key_for_asset_key(bronze)
+        == "claude_bronze_io_manager"
+    )

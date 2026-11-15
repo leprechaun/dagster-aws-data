@@ -51,3 +51,11 @@ def test_an_explicit_unsafe_rename_setting_is_not_overridden(monkeypatch):
     resources()
 
     assert os.environ[UNSAFE_RENAME] == "false"
+
+
+def test_the_claude_bronze_tables_are_written_under_claude_in_storage():
+    from aws_data.lib.cloudtrail_s3 import STORAGE_BUCKET
+
+    manager = resources().resources["claude_bronze_io_manager"]
+
+    assert manager.root_uri == f"s3://{STORAGE_BUCKET}/claude"

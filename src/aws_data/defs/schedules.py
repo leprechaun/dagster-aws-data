@@ -1,5 +1,6 @@
 import dagster as dg
 
+from aws_data.defs.claude.claude_bronze_assets import SESSION_STATUS_BRONZE
 from aws_data.defs.claude.claude_raw_files import SESSION_STATUS_FILES
 from aws_data.defs.cloudfront.cloudfront_raw_files import cloudfront_files
 from aws_data.defs.cloudfront.cloudfront_requests import cloudfront_requests
@@ -53,10 +54,10 @@ github_raw_refresh = dg.define_asset_job(
     "github_raw_refresh",
     selection=[*GITHUB_RAW_ASSETS, *GITHUB_BRONZE_ASSETS],
 )
-# Claude Session Status files: the Raw mirror alone, as there is no Bronze yet.
+# Claude Session Status files: the Raw mirror, then its Bronze table.
 claude_refresh = dg.define_asset_job(
     "claude_refresh",
-    selection=[SESSION_STATUS_FILES],
+    selection=[SESSION_STATUS_FILES, SESSION_STATUS_BRONZE],
 )
 
 

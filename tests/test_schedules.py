@@ -4,6 +4,7 @@ import dagster as dg
 import pytest
 from dagster._core.test_utils import freeze_time
 
+from aws_data.defs.claude.claude_bronze_assets import SESSION_STATUS_BRONZE
 from aws_data.defs.claude.claude_raw_files import SESSION_STATUS_FILES
 from aws_data.defs.cloudfront.cloudfront_raw_files import cloudfront_files
 from aws_data.defs.cloudfront.cloudfront_requests import cloudfront_requests
@@ -45,6 +46,7 @@ def definitions() -> dg.Definitions:
                 cur_files,
                 cur_line_items,
                 SESSION_STATUS_FILES,
+                SESSION_STATUS_BRONZE,
                 *GITHUB_RAW_ASSETS,
                 *GITHUB_BRONZE_ASSETS,
             ],
@@ -245,6 +247,9 @@ def test_claude_runs_hourly_at_ten_past_and_starts_on_its_own():
     assert claude_hourly.default_status == dg.DefaultScheduleStatus.RUNNING
 
 
-def test_the_claude_schedule_runs_a_job_that_refreshes_only_the_session_status_raw_files():
+def test_the_claude_schedule_runs_a_job_that_refreshes_the_session_status_raw_files_and_bronze():
     assert claude_hourly.job_name == claude_refresh.name
-    assert selected_asset_keys(claude_refresh.name) == {SESSION_STATUS_FILES.key}
+    assert selected_asset_keys(claude_refresh.name) == {
+        SESSION_STATUS_FILES.key,
+        SESSION_STATUS_BRONZE.key,
+    }

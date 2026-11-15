@@ -196,6 +196,14 @@ def resources() -> dg.Definitions:
         storage_options=storage_options,
     )
 
+    # Claude's Bronze tables sit beside its Raw files, under claude/ rather than
+    # the project root: a table at claude/bronze/session_status is at
+    # s3://<bucket>/claude/bronze/session_status.
+    claude_bronze_io_manager = DescribedDeltaLakePolarsIOManager(
+        root_uri=f"s3://{STORAGE_BUCKET}/claude",
+        storage_options=storage_options,
+    )
+
     return dg.Definitions(
         resources={
             "aws_s3": aws_s3,
@@ -203,6 +211,7 @@ def resources() -> dg.Definitions:
             "minio_s3": minio_s3,
             "io_manager": deltalake_io_manager,
             "github_bronze_io_manager": github_bronze_io_manager,
+            "claude_bronze_io_manager": claude_bronze_io_manager,
             "raw_files_io_manager": RawFilesIOManager(),
         }
     )
