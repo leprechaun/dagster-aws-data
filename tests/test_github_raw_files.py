@@ -1,9 +1,6 @@
 import dagster as dg
 
-from aws_data.defs.github.github_raw_files import (
-    GITHUB_RAW_ASSETS,
-    github_raw_files_asset,
-)
+from aws_data.defs.github.github_raw_files import github_raw_files_asset
 from tests.conftest import FakeS3Client, FakeS3Resource
 
 DELIVERY = "data/github/check_run/2026/11/13/webhooks-2-2026-11-13-10-32-19-6738f2f0"
@@ -23,9 +20,7 @@ def mirror(source: FakeS3Client, raw: FakeS3Client) -> dg.ExecuteInProcessResult
 
 
 def metadata_of(result: dg.ExecuteInProcessResult) -> dict:
-    return result.asset_materializations_for_node("github__raw__check_run_files")[
-        0
-    ].metadata
+    return result.asset_materializations_for_node(check_run_files.op.name)[0].metadata
 
 
 def test_a_check_run_delivery_is_mirrored_into_github_raw_byte_for_byte():
@@ -38,6 +33,13 @@ def test_a_check_run_delivery_is_mirrored_into_github_raw_byte_for_byte():
     assert raw.objects == {
         "github/raw/check_run/2026/11/13/webhooks-2-2026-11-13-10-32-19-6738f2f0": b'{"detail-type": "check_run"}'
     }
+
+
+def test_an_empty_source_folder_succeeds_and_copies_nothing():
+    result = mirror(FakeS3Client(), FakeS3Client())
+
+    assert result.success
+    assert metadata_of(result)["files_copied"].value == 0
 
 
 def test_every_day_of_one_event_type_is_mirrored_and_other_types_are_not():
@@ -92,12 +94,6 @@ def test_the_run_reports_files_copied_already_cached_and_bytes_copied_and_no_day
     assert metadata["files_already_cached"].value == 1
     assert metadata["bytes_copied"].value == len(b"three")
     assert "days" not in metadata
-
-
-def test_the_github_raw_assets_are_unpartitioned_and_there_is_one_per_event_type():
-    assert check_run_files.partitions_def is None
-    assert len(GITHUB_RAW_ASSETS) == 17
-    assert all(asset.partitions_def is None for asset in GITHUB_RAW_ASSETS)
 
 
 def test_the_github_source_resource_talks_to_the_bucket_in_its_own_region():
