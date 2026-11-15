@@ -14,7 +14,7 @@ A Record keeps this name in every layer, including as a row in Bronze.
 _Avoid_: Event, entry
 
 **Delivery Day**:
-The UTC day in a Log File's `yyyy/mm/dd` folder, i.e. when CloudTrail wrote it. It is the partition unit for every CloudTrail layer. A Record's own event time can fall on the previous day (observed for Records in the last minutes of a day), so Delivery Day is not the same as the day the activity happened.
+The UTC day a source delivered its data. For a CloudTrail Log File, the day in its `yyyy/mm/dd` folder, i.e. when CloudTrail wrote it; it is the partition unit for every CloudTrail layer. For a GitHub Webhook Delivery, the UTC day of its envelope's `time`; it is the partition unit for every GitHub layer. A Record's own event time can fall on the previous day (observed for Records in the last minutes of a day), so Delivery Day is not the same as the day the activity happened.
 _Avoid_: Event date, partition date
 
 **Request**:
@@ -38,6 +38,12 @@ The layer holding tables built from Bronze for analysis, rather than one row per
 **Activity**:
 Records counted per time bucket, by caller, API, access (read-only or a change), account, region and error, at several grains (15 minutes, an hour, a day) in one Gold table told apart by a `grain` column. Counts add up within a grain, never across grains. A key a grain leaves out reads `(all)`; a key missing in the source reads `(none)`.
 _Avoid_: Aggregate, rollup
+
+## GitHub
+
+**GitHub Webhook Delivery**:
+One GitHub webhook event as delivered through AWS EventBridge: one JSON file whose envelope carries a `detail-type` (the GitHub event type, e.g. `check_run`) and GitHub's payload under `detail.payload`. A GitHub Webhook Delivery keeps this name in every layer, including as a row in Bronze.
+_Avoid_: Event, webhook, Delivery (alone, which would clash with Delivery Day), record
 
 ## Cost and Usage Report
 

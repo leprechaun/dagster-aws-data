@@ -19,7 +19,7 @@ def mirror(
             [check_run_files],
             partition_key=partition_key,
             resources={
-                "aws_s3": FakeS3Resource(source),
+                "github_source_s3": FakeS3Resource(source),
                 "minio_s3": FakeS3Resource(raw),
                 "raw_files_io_manager": dg.mem_io_manager,
             },
@@ -68,3 +68,13 @@ def test_rerunning_the_partition_copies_nothing_new():
 
     assert result.success
     assert len(raw.objects) == 1
+
+
+def test_the_github_source_resource_talks_to_the_bucket_in_its_own_region():
+    from aws_data.defs.resources import aws_source_s3
+    from aws_data.lib.github_s3 import GITHUB_SOURCE_REGION
+
+    resource = aws_source_s3("key-id", "secret", region=GITHUB_SOURCE_REGION)
+
+    assert resource.region_name == "ap-southeast-1"
+    assert resource.endpoint_url == "https://s3.ap-southeast-1.amazonaws.com"

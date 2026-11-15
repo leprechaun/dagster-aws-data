@@ -12,6 +12,7 @@ from dagster_delta.io_manager.polars import (
 from deltalake import DeltaTable
 
 from aws_data.lib.cloudtrail_s3 import PROJECT_PREFIX, SOURCE_REGION, STORAGE_BUCKET
+from aws_data.lib.github_s3 import GITHUB_SOURCE_REGION
 
 
 def aws_source_s3(
@@ -146,6 +147,14 @@ def resources() -> dg.Definitions:
         dg.EnvVar("SOURCE_AWS_SECRET_ACCESS_KEY"),
     )
 
+    # GitHub deliveries live in a bucket in another region, so they get a
+    # client for that region, with the same source credentials.
+    github_source_s3 = aws_source_s3(
+        dg.EnvVar("SOURCE_AWS_ACCESS_KEY_ID"),
+        dg.EnvVar("SOURCE_AWS_SECRET_ACCESS_KEY"),
+        region=GITHUB_SOURCE_REGION,
+    )
+
     # Storage: MinIO running on the k3s cluster, spoken to via the S3-compatible
     # API. It uses the standard AWS_* variables (shared with the other
     # pipelines on this cluster), passed explicitly rather than left to boto3.
@@ -182,6 +191,7 @@ def resources() -> dg.Definitions:
     return dg.Definitions(
         resources={
             "aws_s3": aws_s3,
+            "github_source_s3": github_source_s3,
             "minio_s3": minio_s3,
             "io_manager": deltalake_io_manager,
             "raw_files_io_manager": RawFilesIOManager(),

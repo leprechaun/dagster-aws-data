@@ -10,6 +10,8 @@ from datetime import date
 import dagster as dg
 
 SOURCE_BUCKET = "lmacguire-firehose"
+# The bucket's own region: S3 requests must go there, not to the default one.
+GITHUB_SOURCE_REGION = "ap-southeast-1"
 SOURCE_PREFIX = "data/github"
 RAW_PREFIX = "github/raw"
 

@@ -25,13 +25,15 @@ from aws_data.lib.s3 import mirror_prefixes
     pool=PROJECT_PREFIX,
 )
 def check_run_files(
-    context: dg.AssetExecutionContext, aws_s3: S3Resource, minio_s3: S3Resource
+    context: dg.AssetExecutionContext,
+    github_source_s3: S3Resource,
+    minio_s3: S3Resource,
 ) -> None:
     """Mirrors one UTC day of check_run deliveries from the firehose bucket to
     Raw, byte-for-byte, with the `data/` segment dropped from each key."""
     day = date.fromisoformat(context.partition_key)
     mirrored = mirror_prefixes(
-        aws_s3.get_client(),
+        github_source_s3.get_client(),
         SOURCE_BUCKET,
         [github_day_prefix("check_run", day)],
         "",
