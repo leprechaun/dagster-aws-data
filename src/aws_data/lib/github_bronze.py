@@ -113,6 +113,12 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "push_head_commit_id": ("head_commit.id", pl.Utf8),
         "push_head_commit_message": ("head_commit.message", pl.Utf8),
     },
+    "create": {
+        "create_ref": ("ref", pl.Utf8),
+        "create_ref_type": ("ref_type", pl.Utf8),
+        "create_master_branch": ("master_branch", pl.Utf8),
+        "create_pusher_type": ("pusher_type", pl.Utf8),
+    },
 }
 
 
