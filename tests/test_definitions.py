@@ -26,3 +26,23 @@ def test_each_github_bronze_asset_depends_on_its_raw_asset():
         bronze = dg.AssetKey(["github", "bronze", event_type])
         raw = dg.AssetKey(["github", "raw", f"{event_type}_files"])
         assert raw in asset_graph.get(bronze).parent_keys
+
+
+def test_the_project_definitions_load_with_an_unpartitioned_claude_raw_asset_in_the_claude_group():
+    repository = defs().get_repository_def()
+
+    raw = repository.assets_defs_by_key[
+        dg.AssetKey(["claude", "raw", "session_status_files"])
+    ]
+    assert raw.partitions_def is None
+    assert (
+        raw.group_names_by_key[dg.AssetKey(["claude", "raw", "session_status_files"])]
+        == "claude"
+    )
+
+
+def test_the_project_loads_the_claude_refresh_job_and_its_hourly_schedule():
+    repository = defs().get_repository_def()
+
+    assert repository.get_job("claude_refresh") is not None
+    assert repository.get_schedule_def("claude_hourly").cron_schedule == "10 * * * *"

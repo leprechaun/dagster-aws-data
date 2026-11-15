@@ -1,5 +1,6 @@
 import dagster as dg
 
+from aws_data.defs.claude.claude_raw_files import SESSION_STATUS_FILES
 from aws_data.defs.cloudfront.cloudfront_raw_files import cloudfront_files
 from aws_data.defs.cloudfront.cloudfront_requests import cloudfront_requests
 from aws_data.defs.cloudtrail.cloudtrail_activity import cloudtrail_activity
@@ -51,6 +52,11 @@ cur_refresh = dg.define_asset_job(
 github_raw_refresh = dg.define_asset_job(
     "github_raw_refresh",
     selection=[*GITHUB_RAW_ASSETS, *GITHUB_BRONZE_ASSETS],
+)
+# Claude Session Status files: the Raw mirror alone, as there is no Bronze yet.
+claude_refresh = dg.define_asset_job(
+    "claude_refresh",
+    selection=[SESSION_STATUS_FILES],
 )
 
 
@@ -111,4 +117,15 @@ def cur_hourly(context: dg.ScheduleEvaluationContext):
 def github_raw_hourly(context: dg.ScheduleEvaluationContext):
     # The Raw assets are unpartitioned: one run per tick lists each type's folder
     # and copies whatever is new.
+    yield dg.RunRequest(run_key=context.scheduled_execution_time.isoformat())
+
+
+@dg.schedule(
+    job=claude_refresh,
+    cron_schedule="10 * * * *",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
+)
+def claude_hourly(context: dg.ScheduleEvaluationContext):
+    # The Raw asset is unpartitioned: one run per tick lists the session-status
+    # folder and copies whatever is new.
     yield dg.RunRequest(run_key=context.scheduled_execution_time.isoformat())
