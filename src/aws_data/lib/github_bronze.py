@@ -180,6 +180,12 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "alert_ghsa_id": ("alert.ghsa_id", pl.Utf8),
         "alert_created_at": ("alert.created_at", pl.Datetime("us", "UTC")),
     },
+    "repository_ruleset": {
+        "repository_ruleset_id": ("repository_ruleset.id", pl.Int64),
+        "repository_ruleset_name": ("repository_ruleset.name", pl.Utf8),
+        "repository_ruleset_target": ("repository_ruleset.target", pl.Utf8),
+        "repository_ruleset_enforcement": ("repository_ruleset.enforcement", pl.Utf8),
+    },
 }
 
 
