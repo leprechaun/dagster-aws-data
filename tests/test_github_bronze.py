@@ -1,14 +1,14 @@
 import json
 from datetime import datetime, timezone
 
-from aws_data.lib.github_bronze import parse_check_run_file
+from aws_data.lib.github_bronze import parse_raw_file
 from tests.github_envelopes import envelope, one_line
 
 SOURCE_KEY = "github/raw/check_run/2026/09/08/webhooks-2-2026-09-08-17-17-42-abc"
 
 
 def test_a_one_line_file_becomes_one_row_with_the_envelope_and_payload_columns():
-    df = parse_check_run_file(one_line(envelope()), SOURCE_KEY)
+    df = parse_raw_file(one_line(envelope()), SOURCE_KEY)
 
     assert df.height == 1
     row = df.row(0, named=True)
@@ -25,44 +25,37 @@ def test_a_one_line_file_becomes_one_row_with_the_envelope_and_payload_columns()
     assert row["organization_name"] == "snacker-tracker"
     assert row["sender_id"] == 91011
     assert row["sender_name"] == "octocat"
-    assert row["check_run_id"] == 102162572568
-    assert row["check_run_status"] == "queued"
-    assert row["check_run_conclusion"] is None
     assert json.loads(row["payload"])["check_run"]["name"] == "deploy-prod"
+
+
+def test_the_payload_column_keeps_everything_type_specific():
+    df = parse_raw_file(one_line(envelope()), SOURCE_KEY)
+
+    payload = json.loads(df.row(0, named=True)["payload"])
+    assert payload["check_run"]["status"] == "queued"
+    assert payload["check_run"]["conclusion"] is None
 
 
 def test_a_multi_line_file_becomes_one_row_per_envelope_in_file_order():
     first = envelope(id="first", time="2026-09-08T17:17:42Z", action="created")
-    second = envelope(
-        id="second",
-        time="2026-09-08T17:18:00Z",
-        action="completed",
-        check_run={
-            "id": 7,
-            "status": "completed",
-            "conclusion": "success",
-            "name": "test",
-        },
-    )
+    second = envelope(id="second", time="2026-09-08T17:18:00Z", action="completed")
     body = one_line(first) + one_line(second)
 
-    df = parse_check_run_file(body, SOURCE_KEY)
+    df = parse_raw_file(body, SOURCE_KEY)
 
     assert df["id"].to_list() == ["first", "second"]
     assert df["action"].to_list() == ["created", "completed"]
-    assert df["check_run_conclusion"].to_list() == [None, "success"]
     assert df["source_file"].to_list() == [SOURCE_KEY, SOURCE_KEY]
 
 
-def test_a_missing_optional_field_becomes_null_and_the_row_is_kept():
-    no_conclusion = {"id": 8, "status": "in_progress", "name": "lint"}
-    body = one_line(envelope(id="no-conclusion", check_run=no_conclusion))
+def test_an_event_with_no_action_has_a_null_action_and_is_kept():
+    body = one_line(envelope(id="push-1", detail_type="push", action=None))
 
-    df = parse_check_run_file(body, SOURCE_KEY)
+    df = parse_raw_file(body, SOURCE_KEY)
 
     assert df.height == 1
-    assert df["check_run_status"].to_list() == ["in_progress"]
-    assert df["check_run_conclusion"].to_list() == [None]
+    assert df["detail_type"].to_list() == ["push"]
+    assert df["action"].to_list() == [None]
 
 
 def test_envelopes_sharing_an_id_are_both_kept_as_separate_rows():
@@ -71,8 +64,7 @@ def test_envelopes_sharing_an_id_are_both_kept_as_separate_rows():
         envelope(id=same_id, action="created")
     )
 
-    df = parse_check_run_file(body, SOURCE_KEY)
+    df = parse_raw_file(body, SOURCE_KEY)
 
     assert df.height == 2
     assert df["id"].to_list() == [same_id, same_id]
-

@@ -1,6 +1,9 @@
 """Parsing GitHub webhook Raw files into Bronze rows.
 
 Pure functions only: bytes in, rows out. Nothing here touches S3 or Delta.
+
+Every event type shares one schema: the envelope, the fields common to GitHub
+payloads, and the full payload as JSON for everything type-specific.
 """
 
 import json
@@ -10,7 +13,7 @@ import polars as pl
 
 from aws_data.lib.github_s3 import SOURCE_PREFIX, github_raw_key
 
-CHECK_RUN_SCHEMA = {
+BRONZE_SCHEMA = {
     "id": pl.Utf8,
     "time": pl.Datetime("us", "UTC"),
     "account": pl.Utf8,
@@ -24,16 +27,15 @@ CHECK_RUN_SCHEMA = {
     "organization_name": pl.Utf8,
     "sender_id": pl.Int64,
     "sender_name": pl.Utf8,
-    "check_run_id": pl.Int64,
-    "check_run_status": pl.Utf8,
-    "check_run_conclusion": pl.Utf8,
     "payload": pl.Utf8,
 }
 
 
-def _check_run_row(envelope: dict, source_key: str) -> dict:
+def _row(envelope: dict, source_key: str) -> dict:
     payload = envelope["detail"]["payload"]
-    check_run = payload["check_run"]
+    repository = payload.get("repository", {})
+    organization = payload.get("organization", {})
+    sender = payload.get("sender", {})
     return {
         "id": envelope["id"],
         "time": datetime.fromisoformat(envelope["time"].replace("Z", "+00:00")),
@@ -41,28 +43,27 @@ def _check_run_row(envelope: dict, source_key: str) -> dict:
         "region": envelope["region"],
         "detail_type": envelope["detail-type"],
         "source_file": source_key,
-        "action": payload["action"],
-        "repository_id": payload["repository"]["id"],
-        "repository_name": payload["repository"]["full_name"],
-        "organization_id": payload["organization"]["id"],
-        "organization_name": payload["organization"]["login"],
-        "sender_id": payload["sender"]["id"],
-        "sender_name": payload["sender"]["login"],
-        "check_run_id": check_run["id"],
-        "check_run_status": check_run["status"],
-        "check_run_conclusion": check_run.get("conclusion"),
+        "action": payload.get("action"),
+        "repository_id": repository.get("id"),
+        "repository_name": repository.get("full_name"),
+        "organization_id": organization.get("id"),
+        "organization_name": organization.get("login"),
+        "sender_id": sender.get("id"),
+        "sender_name": sender.get("login"),
         "payload": json.dumps(payload),
     }
 
 
-def parse_check_run_file(body: bytes, source_key: str) -> pl.DataFrame:
-    """One row per envelope in a Raw check_run file, one-line or multi-line JSON."""
+def parse_raw_file(body: bytes, source_key: str) -> pl.DataFrame:
+    """One row per envelope in a Raw file, one-line or multi-line JSON."""
     rows = [
-        _check_run_row(json.loads(line), source_key)
+        _row(json.loads(line), source_key)
         for line in body.decode().splitlines()
         if line.strip()
     ]
-    return pl.DataFrame(rows, schema=CHECK_RUN_SCHEMA)
+    return pl.DataFrame(rows, schema=BRONZE_SCHEMA)
 
 
-CHECK_RUN_RAW_PREFIX = github_raw_key(f"{SOURCE_PREFIX}/check_run/")
+def raw_prefix(event_type: str) -> str:
+    """The Raw prefix holding every file of one event type: `github/raw/<event_type>/`."""
+    return github_raw_key(f"{SOURCE_PREFIX}/{event_type}/")
