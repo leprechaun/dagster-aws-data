@@ -124,6 +124,14 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "delete_ref_type": ("ref_type", pl.Utf8),
         "delete_pusher_type": ("pusher_type", pl.Utf8),
     },
+    "deployment": {
+        "deployment_id": ("deployment.id", pl.Int64),
+        "deployment_environment": ("deployment.environment", pl.Utf8),
+        "deployment_task": ("deployment.task", pl.Utf8),
+        "deployment_ref": ("deployment.ref", pl.Utf8),
+        "deployment_sha": ("deployment.sha", pl.Utf8),
+        "deployment_created_at": ("deployment.created_at", pl.Datetime("us", "UTC")),
+    },
 }
 
 
