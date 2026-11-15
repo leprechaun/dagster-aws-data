@@ -152,6 +152,12 @@ TYPE_COLUMNS: dict[str, dict[str, tuple[str | Callable[[dict], Any], pl.DataType
         "issue_closed_at": ("issue.closed_at", pl.Datetime("us", "UTC")),
         "issue_label_name": ("label.name", pl.Utf8),
     },
+    "issue_comment": {
+        "comment_id": ("comment.id", pl.Int64),
+        "comment_issue_number": ("issue.number", pl.Int64),
+        "comment_author_association": ("comment.author_association", pl.Utf8),
+        "comment_created_at": ("comment.created_at", pl.Datetime("us", "UTC")),
+    },
 }
 
 
