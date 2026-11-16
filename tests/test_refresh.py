@@ -22,8 +22,8 @@ def test_days_are_utc_days_whatever_time_zone_the_tick_arrives_in():
 
 
 def test_days_before_the_sources_first_partition_are_dropped():
-    assert partitions_to_refresh(utc(2026, 11, 13, 10, 40), CLOUDFRONT_PARTITIONS_DEF) == ["2026-11-13"]
-    assert partitions_to_refresh(utc(2026, 11, 14, 0, 40), CLOUDFRONT_PARTITIONS_DEF) == ["2026-11-13", "2026-11-14"]
+    assert partitions_to_refresh(utc(2026, 10, 23, 10, 40), CLOUDFRONT_PARTITIONS_DEF) == ["2026-10-23"]
+    assert partitions_to_refresh(utc(2026, 10, 24, 0, 40), CLOUDFRONT_PARTITIONS_DEF) == ["2026-10-23", "2026-10-24"]
 
 
 def test_the_latest_two_billing_periods_are_last_month_and_this_month():

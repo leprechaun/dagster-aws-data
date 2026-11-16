@@ -95,10 +95,10 @@ def test_cloudtrail_refreshes_yesterday_and_today_each_hour():
 
 def test_cloudfront_refreshes_only_the_days_that_exist():
     requests = run_requests_at(
-        cloudfront_hourly, datetime(2026, 11, 13, 10, 40, tzinfo=UTC)
+        cloudfront_hourly, datetime(2026, 10, 23, 10, 40, tzinfo=UTC)
     )
 
-    assert [request.partition_key for request in requests] == ["2026-11-13"]
+    assert [request.partition_key for request in requests] == ["2026-10-23"]
 
 
 @pytest.mark.parametrize(

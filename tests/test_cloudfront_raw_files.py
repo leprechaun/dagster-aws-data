@@ -132,7 +132,7 @@ def test_the_asset_is_registered_under_the_project_namespace_in_the_shared_pool(
     [spec] = cloudfront_files.specs
 
     assert key.path == ["aws-data", "raw", "cloudfront_files"]
-    assert cloudfront_files.partitions_def.start.date().isoformat() == "2026-11-13"
+    assert cloudfront_files.partitions_def.start.date().isoformat() == "2026-10-23"
     assert cloudfront_files.group_names_by_key[key] == "cloudfront"
     assert spec.kinds == {"s3"}
     assert cloudfront_files.op.pool == "aws-data"

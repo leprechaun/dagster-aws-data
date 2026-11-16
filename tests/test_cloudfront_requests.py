@@ -227,7 +227,7 @@ def test_the_asset_is_registered_after_raw_under_the_project_namespace_in_the_sh
 
     assert key.path == ["aws-data", "bronze", "cloudfront_requests"]
     assert cloudfront_requests.asset_deps[key] == {dg.AssetKey(["aws-data", "raw", "cloudfront_files"])}
-    assert cloudfront_requests.partitions_def.start.date().isoformat() == "2026-11-13"
+    assert cloudfront_requests.partitions_def.start.date().isoformat() == "2026-10-23"
     assert cloudfront_requests.group_names_by_key[key] == "cloudfront"
     assert spec.kinds == {"s3", "deltalake"}
     assert spec.metadata["partition_expr"] == "request_date"

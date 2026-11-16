@@ -18,4 +18,6 @@ def test_the_day_in_progress_is_a_partition(partitions_def):
 
 
 def test_cloudfront_has_a_partition_on_the_day_it_starts():
-    assert CLOUDFRONT_PARTITIONS_DEF.get_partition_keys(current_time=MIDDAY) == ["2026-11-13"]
+    first_day_midday = datetime(2026, 10, 23, 12, 0, tzinfo=UTC)
+
+    assert CLOUDFRONT_PARTITIONS_DEF.get_partition_keys(current_time=first_day_midday) == ["2026-10-23"]

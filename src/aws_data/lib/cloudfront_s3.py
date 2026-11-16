@@ -18,8 +18,8 @@ CLOUDFRONT_SOURCE_PREFIX = "AWSLogs"
 # Destination: mirrored 1:1 (same key layout) beside the other Raw files.
 CLOUDFRONT_RAW_PREFIX = f"{PROJECT_PREFIX}/raw/cloudfront"
 
-# The first day logs were delivered to the bucket.
-CLOUDFRONT_HISTORY_START_DATE = "2026-11-13"
+# The first day of logs we ingest.
+CLOUDFRONT_HISTORY_START_DATE = "2026-10-23"
 
 # end_offset=1 makes the day in progress a partition too. Both layers are
 # idempotent per day (Raw skips what it already has, Bronze replaces the day's
