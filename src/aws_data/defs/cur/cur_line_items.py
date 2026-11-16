@@ -59,7 +59,7 @@ def clean_line_items(raw: pl.DataFrame, billing_period_start: date, ingested_at:
     description=(
         "Bronze: every Line Item of the Cost and Usage Report, one row per Line Item, read from the Raw "
         "mirror and partitioned by Billing Period. Every column as AWS delivers it; map columns such as "
-        "resource_tags are lists of key/value pairs."
+        "resource_tags stay maps."
     ),
     deps=[cur_files],
     # A Billing Period AWS hasn't delivered yet is left alone, not materialized.
