@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -88,10 +88,10 @@ def test_a_workflow_run_delivery_fills_its_typed_columns_from_the_payload():
     assert row["workflow_run_status"] == "completed"
     assert row["workflow_run_conclusion"] == "success"
     assert row["workflow_run_run_started_at"] == datetime(
-        2026, 8, 8, 10, 31, 35, tzinfo=timezone.utc
+        2026, 8, 8, 10, 31, 35, tzinfo=UTC
     )
     assert row["workflow_run_updated_at"] == datetime(
-        2026, 8, 8, 10, 32, 18, tzinfo=timezone.utc
+        2026, 8, 8, 10, 32, 18, tzinfo=UTC
     )
 
 
@@ -123,7 +123,7 @@ def test_an_in_progress_workflow_run_reads_a_null_conclusion_and_is_kept():
     assert row["workflow_run_conclusion"] is None
     assert row["workflow_run_run_started_at"] is None
     assert row["workflow_run_updated_at"] == datetime(
-        2026, 8, 8, 10, 33, 0, tzinfo=timezone.utc
+        2026, 8, 8, 10, 33, 0, tzinfo=UTC
     )
 
 
@@ -145,7 +145,7 @@ def test_a_malformed_workflow_run_timestamp_reads_null_and_keeps_the_row():
     assert df["id"].to_list() == ["wr-bad-time"]
     assert df["workflow_run_run_started_at"].to_list() == [None]
     assert df["workflow_run_updated_at"].to_list() == [
-        datetime(2026, 8, 8, 10, 33, 0, tzinfo=timezone.utc)
+        datetime(2026, 8, 8, 10, 33, 0, tzinfo=UTC)
     ]
 
 

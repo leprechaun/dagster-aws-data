@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -61,10 +61,10 @@ def test_a_check_suite_delivery_fills_its_typed_columns_from_the_payload():
     assert row["check_suite_status"] == "completed"
     assert row["check_suite_conclusion"] == "success"
     assert row["check_suite_created_at"] == datetime(
-        2026, 8, 8, 10, 31, 35, tzinfo=timezone.utc
+        2026, 8, 8, 10, 31, 35, tzinfo=UTC
     )
     assert row["check_suite_updated_at"] == datetime(
-        2026, 8, 8, 10, 32, 18, tzinfo=timezone.utc
+        2026, 8, 8, 10, 32, 18, tzinfo=UTC
     )
 
 
@@ -87,7 +87,7 @@ def test_a_check_suite_still_running_has_no_conclusion_and_is_kept():
     assert row["check_suite_status"] == "in_progress"
     assert row["check_suite_conclusion"] is None
     assert row["check_suite_updated_at"] == datetime(
-        2026, 8, 8, 10, 31, 40, tzinfo=timezone.utc
+        2026, 8, 8, 10, 31, 40, tzinfo=UTC
     )
 
 

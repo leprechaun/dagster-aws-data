@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -75,7 +75,7 @@ def test_a_published_release_delivery_fills_its_typed_columns_from_the_payload()
     assert row["release_draft"] is False
     assert row["release_prerelease"] is False
     assert row["release_published_at"] == datetime(
-        2026, 10, 24, 10, 30, 39, tzinfo=timezone.utc
+        2026, 10, 24, 10, 30, 39, tzinfo=UTC
     )
 
 

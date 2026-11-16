@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import dagster as dg
 import polars as pl
@@ -13,7 +13,7 @@ from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
 
 EVENTS_KEY = dg.AssetKey(["aws-data", "bronze", "cloudtrail_events"])
 ACTIVITY_KEY = dg.AssetKey(["aws-data", "gold", "cloudtrail_activity"])
-NOON = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
+NOON = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
 
 
 def test_the_table_is_gold_and_sits_beside_the_other_cloudtrail_assets():
@@ -77,7 +77,7 @@ def bronze_day(delivery_day: str, *event_times: datetime) -> dg.AssetsDefinition
 def test_every_delivery_day_is_counted_in_one_unpartitioned_table_that_is_rebuilt_in_place(tmp_path):
     root = str(tmp_path / "aws-data")  # the real root also ends in the project prefix
     io_manager = delta_io_manager(root)
-    when = lambda day, hour, minute: datetime(2026, 11, day, hour, minute, tzinfo=timezone.utc)
+    when = lambda day, hour, minute: datetime(2026, 11, day, hour, minute, tzinfo=UTC)
 
     def materialize(assets, partition_key=None, selection=None):
         with freeze_time(NOON):

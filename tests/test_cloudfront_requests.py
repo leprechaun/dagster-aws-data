@@ -2,7 +2,7 @@ import gzip
 import json
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import dagster as dg
 import polars as pl
@@ -160,7 +160,7 @@ def test_the_request_time_is_a_utc_timestamp_from_the_lines_date_and_time():
 
     row = bronze_table({key: body}).row(0, named=True)
 
-    assert row["request_time"] == datetime(2026, 11, 13, 9, 13, 40, tzinfo=timezone.utc)
+    assert row["request_time"] == datetime(2026, 11, 13, 9, 13, 40, tzinfo=UTC)
 
 
 def test_textual_fields_are_strings_and_a_dash_means_missing():
@@ -195,7 +195,7 @@ def test_each_row_records_its_log_file_and_when_it_was_ingested():
     row = bronze_table({key: body}).row(0, named=True)
 
     assert row["source_key"] == key
-    assert timedelta(0) <= datetime.now(timezone.utc) - row["ingested_at"] < timedelta(minutes=1)
+    assert timedelta(0) <= datetime.now(UTC) - row["ingested_at"] < timedelta(minutes=1)
 
 
 def test_the_full_original_line_is_kept_as_json():
@@ -287,7 +287,7 @@ def test_a_field_with_no_column_is_kept_only_in_the_original_line():
     assert json.loads(table["raw_json"][0]) == with_new_field
 
 
-INGESTED_AT = datetime(2026, 11, 14, 0, 5, tzinfo=timezone.utc)
+INGESTED_AT = datetime(2026, 11, 14, 0, 5, tzinfo=UTC)
 
 
 def gz_lines(*records: dict) -> bytes:
@@ -317,7 +317,7 @@ def test_clean_requests_maps_one_line_to_one_row():
     populated = {column: value for column, value in row.items() if value is not None}
     assert populated == {
         "request_date": date(2026, 11, 13),
-        "request_time": datetime(2026, 11, 13, 9, 13, 40, tzinfo=timezone.utc),
+        "request_time": datetime(2026, 11, 13, 9, 13, 40, tzinfo=UTC),
         "account_id": ACCOUNT,
         "distribution_id": DISTRIBUTION,
         "x_edge_location": "HEL51-P5",

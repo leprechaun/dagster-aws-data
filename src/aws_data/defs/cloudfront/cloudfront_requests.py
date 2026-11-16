@@ -1,7 +1,7 @@
 import gzip
 import io
 import re
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import dagster as dg
 import polars as pl
@@ -324,7 +324,7 @@ def cloudfront_requests(
                         account_id,
                         distribution_id,
                         key,
-                        datetime.now(timezone.utc),
+                        datetime.now(UTC),
                     )
                 )
                 files_read += 1

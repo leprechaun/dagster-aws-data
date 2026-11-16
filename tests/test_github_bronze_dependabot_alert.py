@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -74,7 +74,7 @@ def test_a_withdrawn_dependabot_alert_delivery_fills_its_alert_columns():
     assert row["alert_package_name"] == "lodash"
     assert row["alert_ghsa_id"] == "GHSA-f23m-r3pf-42rh"
     assert row["alert_created_at"] == datetime(
-        2026, 4, 2, 9, 9, 38, tzinfo=timezone.utc
+        2026, 4, 2, 9, 9, 38, tzinfo=UTC
     )
 
 
@@ -111,7 +111,7 @@ def test_a_created_dependabot_alert_delivery_is_keyed_by_its_alert_number():
     assert row["alert_severity"] == "high"
     assert row["alert_ghsa_id"] == "GHSA-jr5f-v2jv-69x6"
     assert row["alert_created_at"] == datetime(
-        2025, 3, 7, 15, 16, 52, tzinfo=timezone.utc
+        2025, 3, 7, 15, 16, 52, tzinfo=UTC
     )
 
 

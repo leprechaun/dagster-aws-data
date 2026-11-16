@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -71,7 +71,7 @@ def test_a_deployment_status_delivery_fills_its_typed_columns_from_the_payload()
     assert row["deployment_status_environment"] == "dev"
     assert row["deployment_status_deployment_id"] == 3760321203
     assert row["deployment_status_created_at"] == datetime(
-        2026, 2, 3, 14, 17, 9, tzinfo=timezone.utc
+        2026, 2, 3, 14, 17, 9, tzinfo=UTC
     )
 
 
@@ -89,5 +89,5 @@ def test_a_deployment_status_field_missing_from_a_delivery_reads_null_and_is_kep
     assert row["deployment_status_environment"] is None
     assert row["deployment_status_deployment_id"] is None
     assert row["deployment_status_created_at"] == datetime(
-        2026, 2, 3, 14, 17, 9, tzinfo=timezone.utc
+        2026, 2, 3, 14, 17, 9, tzinfo=UTC
     )

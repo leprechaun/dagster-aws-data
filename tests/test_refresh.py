@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from aws_data.lib.cloudfront_s3 import CLOUDFRONT_PARTITIONS_DEF
 from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
@@ -7,7 +7,7 @@ from aws_data.lib.refresh import billing_periods_to_refresh, partitions_to_refre
 
 
 def utc(*args) -> datetime:
-    return datetime(*args, tzinfo=timezone.utc)
+    return datetime(*args, tzinfo=UTC)
 
 
 def test_the_latest_two_days_are_yesterday_and_today():

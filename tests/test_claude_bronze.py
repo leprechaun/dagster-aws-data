@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 import pytest
@@ -23,7 +23,7 @@ def test_a_one_line_file_becomes_one_row_with_the_envelope_and_detail_columns():
     assert df.height == 1
     row = df.row(0, named=True)
     assert row["id"] == "3f1c2b9e-7d4a-4e8b-9a61-0c2d5e7f8a90"
-    assert row["time"] == datetime(2026, 11, 13, 10, 32, 19, tzinfo=timezone.utc)
+    assert row["time"] == datetime(2026, 11, 13, 10, 32, 19, tzinfo=UTC)
     assert row["account"] == "123456789012"
     assert row["region"] == "ap-southeast-1"
     assert row["detail_type"] == "session-status"

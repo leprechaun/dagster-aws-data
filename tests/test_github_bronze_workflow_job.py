@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -68,10 +68,10 @@ def test_a_completed_workflow_job_delivery_fills_its_typed_columns_from_the_payl
     assert row["workflow_job_status"] == "completed"
     assert row["workflow_job_conclusion"] == "success"
     assert row["workflow_job_started_at"] == datetime(
-        2026, 8, 8, 10, 31, 39, tzinfo=timezone.utc
+        2026, 8, 8, 10, 31, 39, tzinfo=UTC
     )
     assert row["workflow_job_completed_at"] == datetime(
-        2026, 8, 8, 10, 32, 16, tzinfo=timezone.utc
+        2026, 8, 8, 10, 32, 16, tzinfo=UTC
     )
     assert row["workflow_job_runner_name"] == "GitHub Actions 1000000001"
 
@@ -127,5 +127,5 @@ def test_a_malformed_workflow_job_timestamp_reads_null_and_keeps_the_row():
 
     assert df["workflow_job_started_at"].to_list() == [None]
     assert df["workflow_job_completed_at"].to_list() == [
-        datetime(2026, 8, 8, 10, 32, 16, tzinfo=timezone.utc)
+        datetime(2026, 8, 8, 10, 32, 16, tzinfo=UTC)
     ]

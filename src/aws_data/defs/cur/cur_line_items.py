@@ -1,6 +1,6 @@
 import io
 from collections.abc import Iterator
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import dagster as dg
 import polars as pl
@@ -59,7 +59,7 @@ def clean_line_items(raw: pl.DataFrame, billing_period_start: date, ingested_at:
     description=(
         "Bronze: every Line Item of the Cost and Usage Report, one row per Line Item, read from the Raw "
         "mirror and partitioned by Billing Period. Every column as AWS delivers it; map columns such as "
-        "resource_tags are lists of key/value pairs."
+        "resource_tags stay maps."
     ),
     deps=[cur_files],
     # A Billing Period AWS hasn't delivered yet is left alone, not materialized.
@@ -103,4 +103,4 @@ def cur_line_items(context: dg.AssetExecutionContext, minio_s3: S3Resource) -> I
 
     context.add_output_metadata({"files_read": len(frames), "line_items_read": line_items.height})
 
-    yield dg.Output(clean_line_items(line_items, date.fromisoformat(context.partition_key), datetime.now(timezone.utc)))
+    yield dg.Output(clean_line_items(line_items, date.fromisoformat(context.partition_key), datetime.now(UTC)))

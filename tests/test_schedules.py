@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import dagster as dg
 import pytest
@@ -84,7 +84,7 @@ def run_requests_at(
 
 def test_cloudtrail_refreshes_yesterday_and_today_each_hour():
     requests = run_requests_at(
-        cloudtrail_hourly, datetime(2026, 11, 13, 10, 20, tzinfo=timezone.utc)
+        cloudtrail_hourly, datetime(2026, 11, 13, 10, 20, tzinfo=UTC)
     )
 
     assert [request.partition_key for request in requests] == [
@@ -95,7 +95,7 @@ def test_cloudtrail_refreshes_yesterday_and_today_each_hour():
 
 def test_cloudfront_refreshes_only_the_days_that_exist():
     requests = run_requests_at(
-        cloudfront_hourly, datetime(2026, 11, 13, 10, 40, tzinfo=timezone.utc)
+        cloudfront_hourly, datetime(2026, 11, 13, 10, 40, tzinfo=UTC)
     )
 
     assert [request.partition_key for request in requests] == ["2026-11-13"]
@@ -108,10 +108,10 @@ def test_cloudfront_refreshes_only_the_days_that_exist():
 )
 def test_each_tick_launches_fresh_runs_instead_of_being_deduplicated(schedule):
     this_hour = run_requests_at(
-        schedule, datetime(2026, 11, 14, 10, 20, tzinfo=timezone.utc)
+        schedule, datetime(2026, 11, 14, 10, 20, tzinfo=UTC)
     )
     next_hour = run_requests_at(
-        schedule, datetime(2026, 11, 14, 11, 20, tzinfo=timezone.utc)
+        schedule, datetime(2026, 11, 14, 11, 20, tzinfo=UTC)
     )
 
     run_keys = [request.run_key for request in this_hour + next_hour]
@@ -158,7 +158,7 @@ def test_each_activity_tick_runs_the_whole_table_once_and_is_not_deduplicated():
     ticks = [
         run_requests_at(
             cloudtrail_activity_hourly,
-            datetime(2026, 11, 14, hour, 50, tzinfo=timezone.utc),
+            datetime(2026, 11, 14, hour, 50, tzinfo=UTC),
         )
         for hour in (10, 11)
     ]
@@ -171,7 +171,7 @@ def test_each_activity_tick_runs_the_whole_table_once_and_is_not_deduplicated():
 
 def test_cur_refreshes_last_month_and_this_month_each_hour():
     requests = run_requests_at(
-        cur_hourly, datetime(2026, 11, 14, 10, 0, tzinfo=timezone.utc)
+        cur_hourly, datetime(2026, 11, 14, 10, 0, tzinfo=UTC)
     )
 
     assert [request.partition_key for request in requests] == [
@@ -182,7 +182,7 @@ def test_cur_refreshes_last_month_and_this_month_each_hour():
 
 def test_cur_refreshes_a_new_year_as_december_and_january():
     requests = run_requests_at(
-        cur_hourly, datetime(2027, 1, 1, 0, 0, tzinfo=timezone.utc)
+        cur_hourly, datetime(2027, 1, 1, 0, 0, tzinfo=UTC)
     )
 
     assert [request.partition_key for request in requests] == [
@@ -203,10 +203,10 @@ def test_the_cur_schedule_runs_a_job_that_refreshes_raw_and_bronze_of_the_cost_a
 
 def test_each_github_raw_tick_is_one_run_with_no_partition_and_a_fresh_run_key():
     this_hour = run_requests_at(
-        github_raw_hourly, datetime(2026, 11, 14, 10, 30, tzinfo=timezone.utc)
+        github_raw_hourly, datetime(2026, 11, 14, 10, 30, tzinfo=UTC)
     )
     next_hour = run_requests_at(
-        github_raw_hourly, datetime(2026, 11, 14, 11, 30, tzinfo=timezone.utc)
+        github_raw_hourly, datetime(2026, 11, 14, 11, 30, tzinfo=UTC)
     )
 
     assert len(this_hour) == len(next_hour) == 1
@@ -230,10 +230,10 @@ def test_github_job_mirrors_then_rebuilds_all_seventeen_event_types_and_nothing_
 
 def test_each_claude_tick_is_one_run_with_no_partition_and_a_fresh_run_key():
     this_hour = run_requests_at(
-        claude_hourly, datetime(2026, 11, 14, 10, 10, tzinfo=timezone.utc)
+        claude_hourly, datetime(2026, 11, 14, 10, 10, tzinfo=UTC)
     )
     next_hour = run_requests_at(
-        claude_hourly, datetime(2026, 11, 14, 11, 10, tzinfo=timezone.utc)
+        claude_hourly, datetime(2026, 11, 14, 11, 10, tzinfo=UTC)
     )
 
     assert len(this_hour) == len(next_hour) == 1

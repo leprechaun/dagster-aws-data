@@ -223,7 +223,7 @@ def _typed_value(value, dtype: pl.DataType):
     if value is None or not isinstance(dtype, pl.Datetime):
         return value
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value)
     except ValueError:
         return None
 
@@ -246,7 +246,7 @@ def _row(envelope: dict, source_key: str, event_type: str) -> dict:
     sender = payload.get("sender", {})
     row = {
         "id": envelope["id"],
-        "time": datetime.fromisoformat(envelope["time"].replace("Z", "+00:00")),
+        "time": datetime.fromisoformat(envelope["time"]),
         "account": envelope["account"],
         "region": envelope["region"],
         "detail_type": envelope["detail-type"],

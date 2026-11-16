@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -83,7 +83,7 @@ def test_an_archived_repository_delivery_becomes_one_row_with_the_repository_nam
     row = df.row(0, named=True)
     assert row["detail_type"] == "repository"
     assert row["action"] == "archived"
-    assert row["time"] == datetime(2026, 11, 15, 9, 0, 0, tzinfo=timezone.utc)
+    assert row["time"] == datetime(2026, 11, 15, 9, 0, 0, tzinfo=UTC)
     assert row["repository_id"] == 1234
     assert row["repository_name"] == "snacker-tracker/reporter-serverless"
     assert row["organization_name"] == "snacker-tracker"

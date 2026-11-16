@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from aws_data.lib.cur_s3 import (
     CUR_PARTITIONS_DEF,
@@ -21,7 +21,7 @@ def test_a_billing_periods_prefix_is_its_data_folder_in_the_export():
 
 
 def _at(day: str) -> datetime:
-    return datetime.fromisoformat(day).replace(tzinfo=timezone.utc)
+    return datetime.fromisoformat(day).replace(tzinfo=UTC)
 
 
 def test_billing_periods_run_from_the_first_export_month_and_include_the_one_in_progress():

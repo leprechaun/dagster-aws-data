@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import polars as pl
 
@@ -9,7 +9,7 @@ from aws_data.defs.cloudtrail.cloudtrail_events import (
     _row_from_record,
 )
 
-INGESTED_AT = datetime(2026, 11, 11, 0, 5, tzinfo=timezone.utc)
+INGESTED_AT = datetime(2026, 11, 11, 0, 5, tzinfo=UTC)
 DELIVERY_DAY = date(2026, 11, 10)
 
 FULL_RECORD = {
@@ -48,7 +48,7 @@ def _row(record: dict) -> dict:
 
 class TestParseEventTime:
     def test_valid_timestamp_is_utc(self):
-        assert _parse_event_time("2026-11-10T12:34:56Z") == datetime(2026, 11, 10, 12, 34, 56, tzinfo=timezone.utc)
+        assert _parse_event_time("2026-11-10T12:34:56Z") == datetime(2026, 11, 10, 12, 34, 56, tzinfo=UTC)
 
     def test_missing_values_are_none(self):
         assert _parse_event_time(None) is None

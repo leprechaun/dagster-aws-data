@@ -1,6 +1,6 @@
 import gzip
 import json
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import dagster as dg
 import polars as pl
@@ -167,7 +167,7 @@ def _parse_event_time(value: str | None) -> datetime | None:
         return None
     try:
         return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
-            tzinfo=timezone.utc
+            tzinfo=UTC
         )
     except ValueError:
         return None
@@ -283,7 +283,7 @@ def cloudtrail_events(
                         files_skipped += 1
                         continue
 
-                    ingested_at = datetime.now(timezone.utc)
+                    ingested_at = datetime.now(UTC)
                     rows.extend(
                         _row_from_record(
                             r, partition_date, organization_id, key, ingested_at

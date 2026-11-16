@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -70,7 +70,7 @@ def test_an_issue_comment_delivery_fills_its_typed_columns_from_the_payload():
     assert row["comment_issue_number"] == 148
     assert row["comment_author_association"] == "MEMBER"
     assert row["comment_created_at"] == datetime(
-        2026, 11, 15, 10, 8, 7, tzinfo=timezone.utc
+        2026, 11, 15, 10, 8, 7, tzinfo=UTC
     )
 
 

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -71,7 +71,7 @@ def test_a_deployment_delivery_fills_its_typed_columns_from_the_payload():
     assert row["deployment_ref"] == "master"
     assert row["deployment_sha"] == "a6571f15c97fb9f35d019f02f13722d4bac9889b"
     assert row["deployment_created_at"] == datetime(
-        2026, 8, 23, 14, 44, 10, tzinfo=timezone.utc
+        2026, 8, 23, 14, 44, 10, tzinfo=UTC
     )
     assert row["action"] == "created"
     assert row["repository_name"] == "snacker-tracker/reporter-serverless"
@@ -89,7 +89,7 @@ def test_a_deployment_field_missing_from_a_delivery_reads_null_and_is_kept():
     row = df.row(0, named=True)
     assert row["deployment_id"] == 6049179907
     assert row["deployment_created_at"] == datetime(
-        2026, 8, 23, 14, 44, 10, tzinfo=timezone.utc
+        2026, 8, 23, 14, 44, 10, tzinfo=UTC
     )
     assert row["deployment_environment"] is None
     assert row["deployment_task"] is None

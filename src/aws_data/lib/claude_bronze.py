@@ -159,7 +159,7 @@ def _row(envelope: dict, source_key: str) -> dict:
     payload = detail["payload"]
     row = {
         "id": envelope["id"],
-        "time": datetime.fromisoformat(envelope["time"].replace("Z", "+00:00")),
+        "time": datetime.fromisoformat(envelope["time"]),
         "account": envelope["account"],
         "region": envelope["region"],
         "detail_type": envelope["detail-type"],

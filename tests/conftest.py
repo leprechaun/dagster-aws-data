@@ -1,6 +1,6 @@
 import hashlib
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from botocore.exceptions import ClientError
 
@@ -77,7 +77,7 @@ class FakeS3Client:
 
 # A day's partition only exists once that day has ended, so run "after" the
 # days under test instead of depending on today's date.
-AFTER_THE_DAYS_UNDER_TEST = datetime(2026, 12, 1, tzinfo=timezone.utc)
+AFTER_THE_DAYS_UNDER_TEST = datetime(2026, 12, 1, tzinfo=UTC)
 
 
 def log_file(account: str, distribution: str, day: str, hour: str, suffix: str = "aaaa1111") -> str:

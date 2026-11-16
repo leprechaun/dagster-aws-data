@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from aws_data.lib.cloudfront_s3 import CLOUDFRONT_PARTITIONS_DEF
 from aws_data.lib.cloudtrail_s3 import CLOUDTRAIL_PARTITIONS_DEF
 
-MIDDAY = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
+MIDDAY = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
 
 
 @pytest.mark.parametrize(

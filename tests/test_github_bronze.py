@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 import pytest
@@ -55,7 +55,7 @@ def test_a_one_line_file_becomes_one_row_with_the_envelope_and_payload_columns()
     assert df.height == 1
     row = df.row(0, named=True)
     assert row["id"] == "60201608-a89e-7b82-3f96-90a129cbf3b0"
-    assert row["time"] == datetime(2026, 9, 8, 17, 17, 42, tzinfo=timezone.utc)
+    assert row["time"] == datetime(2026, 9, 8, 17, 17, 42, tzinfo=UTC)
     assert row["account"] == "307985306317"
     assert row["region"] == "ap-southeast-1"
     assert row["detail_type"] == "check_run"
@@ -92,10 +92,10 @@ def test_a_check_run_delivery_fills_its_typed_columns_from_the_payload():
     assert row["check_run_status"] == "completed"
     assert row["check_run_conclusion"] == "success"
     assert row["check_run_started_at"] == datetime(
-        2026, 8, 8, 10, 31, 39, tzinfo=timezone.utc
+        2026, 8, 8, 10, 31, 39, tzinfo=UTC
     )
     assert row["check_run_completed_at"] == datetime(
-        2026, 8, 8, 10, 32, 16, tzinfo=timezone.utc
+        2026, 8, 8, 10, 32, 16, tzinfo=UTC
     )
 
 
@@ -117,7 +117,7 @@ def test_a_check_run_field_missing_from_a_delivery_reads_null_and_is_kept():
     assert row["check_run_conclusion"] is None
     assert row["check_run_completed_at"] is None
     assert row["check_run_started_at"] == datetime(
-        2026, 8, 8, 10, 31, 39, tzinfo=timezone.utc
+        2026, 8, 8, 10, 31, 39, tzinfo=UTC
     )
 
 
@@ -165,14 +165,14 @@ def test_a_spec_entry_can_be_a_value_derived_from_the_payload(monkeypatch):
 @pytest.mark.parametrize(
     ("started_at", "expected"),
     [
-        ("2026-08-08T10:31:39Z", datetime(2026, 8, 8, 10, 31, 39, tzinfo=timezone.utc)),
+        ("2026-08-08T10:31:39Z", datetime(2026, 8, 8, 10, 31, 39, tzinfo=UTC)),
         (
             "2026-08-08T10:31:39.123Z",
-            datetime(2026, 8, 8, 10, 31, 39, 123000, tzinfo=timezone.utc),
+            datetime(2026, 8, 8, 10, 31, 39, 123000, tzinfo=UTC),
         ),
         (
             "2026-08-08T12:31:39+02:00",
-            datetime(2026, 8, 8, 10, 31, 39, tzinfo=timezone.utc),
+            datetime(2026, 8, 8, 10, 31, 39, tzinfo=UTC),
         ),
     ],
 )

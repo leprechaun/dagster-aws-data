@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import polars as pl
 
@@ -73,9 +73,9 @@ def test_a_closed_issue_delivery_fills_its_issue_columns_from_the_payload():
     assert row["issue_title"] == "Dependency Dashboard"
     assert row["issue_state"] == "closed"
     assert row["issue_state_reason"] == "completed"
-    assert row["issue_created_at"] == datetime(2026, 8, 1, 9, 0, 0, tzinfo=timezone.utc)
+    assert row["issue_created_at"] == datetime(2026, 8, 1, 9, 0, 0, tzinfo=UTC)
     assert row["issue_closed_at"] == datetime(
-        2026, 9, 10, 23, 11, 6, tzinfo=timezone.utc
+        2026, 9, 10, 23, 11, 6, tzinfo=UTC
     )
     assert row["issue_label_name"] is None
 

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import polars as pl
 
@@ -21,7 +21,7 @@ DAILY_BY_CALLER = Grain("1d", "1d", ("caller",))
 
 
 def at(day: int, hour: int, minute: int = 0) -> datetime:
-    return datetime(2026, 11, day, hour, minute, tzinfo=timezone.utc)
+    return datetime(2026, 11, day, hour, minute, tzinfo=UTC)
 
 
 def bronze(*rows: dict) -> pl.LazyFrame:
